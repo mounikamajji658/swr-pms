@@ -9,6 +9,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="index.css?v=7">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+@keyframes swrPulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.syncing-indicator {
+  animation: swrPulse 1.8s infinite ease-in-out;
+}
+</style>
 </head>
 <body>
   <div class="orb orb-1"></div>
@@ -37,7 +46,10 @@
   <div class="nav-brand">
     <div class="nav-icon">🚂</div>
     <div>
-      <div class="nav-title">SWR TMO Procurement</div>
+      <div class="nav-title" style="display: flex; align-items: center;">
+        SWR TMO Procurement
+        <span id="sync-spinner" style="display: none; font-size: 11px; background: rgba(37,99,235,.08); color: #2563eb; border: 1px solid rgba(37,99,235,.15); border-radius: 6px; padding: 2px 8px; margin-left: 10px; font-weight: 600;" class="syncing-indicator">🔄 Syncing...</span>
+      </div>
       <div class="nav-sub">MONITORING SYSTEM</div>
     </div>
   </div>
@@ -355,6 +367,7 @@ let searchTimer = null;
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyuySA7eXZSZIzalvo6IwOofDn20dHZZcP5kJ27fD1K1lPiwv6wzfEE3EKnsLbjiHqWwQ/exec';
 
 async function syncToGoogleSheets() {
+  localStorage.setItem('swr_cached_records', JSON.stringify(allRecords));
   try {
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
@@ -397,6 +410,27 @@ function extractMeta(records) {
   };
 }
 
+function showSyncSpinner(show) {
+  const spinner = document.getElementById('sync-spinner');
+  if (spinner) {
+    spinner.style.display = show ? 'inline-block' : 'none';
+  }
+}
+
+function populateDropdowns(records) {
+  const meta = extractMeta(records);
+  const uSel = document.getElementById('unitFilter');
+  if (uSel) {
+    uSel.innerHTML = '<option value="">All Units</option>';
+    meta.units.forEach(u => { const o = document.createElement('option'); o.textContent = u; uSel.appendChild(o); });
+  }
+  const hSel = document.getElementById('holderFilter');
+  if (hSel) {
+    hSel.innerHTML = '<option value="">All Holders</option>';
+    meta.holders.forEach(h => { const o = document.createElement('option'); o.textContent = h; hSel.appendChild(o); });
+  }
+}
+
 // — INIT —
 async function init() {
   const isAuth = localStorage.getItem('swr_loggedIn') === 'true';
@@ -408,22 +442,40 @@ async function init() {
   
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
+  
+  // 1. Load instantly from cache if available
+  const cachedData = localStorage.getItem('swr_cached_records');
+  if (cachedData) {
+    try {
+      allRecords = JSON.parse(cachedData);
+      renderStats(calcStats(allRecords));
+      applyFilters();
+      populateDropdowns(allRecords);
+    } catch(err) {
+      console.warn('Failed to parse cached records:', err);
+    }
+  }
+  
+  // 2. Fetch fresh data in the background
+  showSyncSpinner(true);
   try {
     const gasRes = await fetch(APPS_SCRIPT_URL).then(r => r.json());
-    allRecords = gasRes.records || [];
-    renderStats(calcStats(allRecords));
-    applyFilters();
+    const freshRecords = gasRes.records || [];
+    const freshStr = JSON.stringify(freshRecords);
+    const cachedStr = JSON.stringify(allRecords);
     
-    const meta = extractMeta(allRecords);
-    const uSel = document.getElementById('unitFilter');
-    uSel.innerHTML = '<option value="">All Units</option>';
-    meta.units.forEach(u => { const o = document.createElement('option'); o.textContent = u; uSel.appendChild(o); });
-    const hSel = document.getElementById('holderFilter');
-    hSel.innerHTML = '<option value="">All Holders</option>';
-    meta.holders.forEach(h => { const o = document.createElement('option'); o.textContent = h; hSel.appendChild(o); });
+    if (freshStr !== cachedStr || !cachedData) {
+      allRecords = freshRecords;
+      localStorage.setItem('swr_cached_records', freshStr);
+      renderStats(calcStats(allRecords));
+      applyFilters();
+      populateDropdowns(allRecords);
+    }
   } catch(e) {
     console.error(e);
-    toast('Failed to load initial data from Google Sheets', 'error');
+    toast('Using offline cache (failed to fetch latest data)', 'warning');
+  } finally {
+    showSyncSpinner(false);
   }
 }
 
