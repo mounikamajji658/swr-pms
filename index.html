@@ -1,0 +1,2097 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SWR TMO Procurement Monitoring System</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚂</text></svg>">
+<meta name="description" content="Railway Procurement Indent Management System — full CRUD for all 112 indents"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="index.css?v=7">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+<!-- ── LOGIN SCREEN ─────────────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-icon">🚂</div>
+    <div class="login-title">SWR TMO Procurement</div>
+    <div class="login-sub">Secure Login</div>
+    <form class="login-form" onsubmit="handleLogin(event)">
+      <input type="text" id="loginUser" class="login-input" placeholder="Username" required />
+      <input type="password" id="loginPass" class="login-input" placeholder="Password" required />
+      <button type="submit" class="login-btn" id="loginSubmitBtn">Enter</button>
+      <div class="login-error" id="loginError">Invalid credentials</div>
+    </form>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
+
+<!-- ── NAVBAR ─────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="nav-brand">
+    <div class="nav-icon">🚂</div>
+    <div>
+      <div class="nav-title">SWR TMO Procurement</div>
+      <div class="nav-sub">MONITORING SYSTEM</div>
+    </div>
+  </div>
+  <div class="nav-center">
+    <span class="search-ico">⌕</span>
+    <input class="nav-search" id="globalSearch" type="text" placeholder="Search indents, firms, PO numbers..." oninput="onSearch()"/>
+  </div>
+  <div class="nav-right">
+    <input type="file" id="csvUpload" accept=".csv, .xlsx, .xls" style="display:none" onchange="importCSV(event)" />
+    <button class="btn-action" style="margin-right:8px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; padding: 0 12px; height: 36px; font-weight: 500;" onclick="document.getElementById('csvUpload').click()" title="Import Data">📤 Import Data</button>
+    <button class="btn-action" style="margin-right:8px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; padding: 0 12px; height: 36px; font-weight: 500;" onclick="exportCSV()" title="Export Data">📥 Export Data</button>
+    <button class="btn-icon" onclick="refreshData()" title="Refresh" id="refreshBtn">↺</button>
+    <button class="btn-icon" onclick="handleLogout()" title="Logout" style="color:var(--red);border-color:rgba(220,38,38,0.2);">🔒</button>
+    <button class="btn-add" onclick="openAdd()">
+      <span style="font-size:16px">＋</span> New Indent
+    </button>
+  </div>
+</nav>
+
+<!-- ── MAIN ───────────────────────────────────────────────────────────── -->
+<main>
+  <!-- Stats -->
+  <div class="stats-grid" id="statsGrid"></div>
+
+  <!-- Content Panel -->
+  <div class="content-panel">
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <div class="tab-chips" id="tabChips">
+        <div class="chip active" data-tab="all" onclick="setTab('all',this)">All Indents</div>
+        <div class="chip" data-tab="safety" onclick="setTab('safety',this)">🔴 Safety Items</div>
+        <div class="chip" data-tab="general" onclick="setTab('general',this)">📦 General Items</div>
+        <div class="chip" data-tab="machine" onclick="setTab('machine',this)">⚙️ Machine Items</div>
+        <div class="chip" data-tab="priority" onclick="setTab('priority',this)">⚡ High Priority</div>
+      </div>
+      <div class="filter-sep"></div>
+      <select class="fsel" id="statusFilter" onchange="applyFilters()">
+        <option value="">All Statuses</option>
+        <option value="tender_phase">Tender Phase (All)</option>
+        <option>Balance Indents to be proposed</option><option>Proposal Started</option><option>Proposal Drafted</option>
+        <option>Proposal Approved</option><option>Under Vetting</option><option>Under Concurrence</option><option>PAC Signing</option><option>Indent Signing</option>
+        <option>Tender to Be Published</option><option>Tender Under Finalisation</option>
+        <option>PO Issued Pending Receipt</option>
+        <option>Material Received</option>
+      </select>
+      <select class="fsel" id="unitFilter" onchange="applyFilters()">
+        <option value="">All Units</option>
+      </select>
+      <select class="fsel" id="holderFilter" onchange="applyFilters()">
+        <option value="">All Holders</option>
+      </select>
+      <select class="fsel" id="abnormalFilter" onchange="applyFilters()">
+        <option value="">Abnormal Cases: All</option>
+        <option value="Yes">Abnormal Cases: Yes</option>
+        <option value="No">Abnormal Cases: No</option>
+      </select>
+      <select class="fsel" id="valueRangeFilter" onchange="handleValueRangeChange()">
+        <option value="">All Values</option>
+        <option value="u1L">Under ₹1 Lakh</option>
+        <option value="1L-10L">₹1 Lakh - ₹10 Lakhs</option>
+        <option value="10L-1Cr">₹10 Lakhs - ₹1 Crore</option>
+        <option value="o1Cr">Over ₹1 Crore</option>
+        <option value="custom">Custom Range...</option>
+      </select>
+      <div id="customValueInputs" style="display: none; align-items: center; gap: 4px;">
+        <input type="number" id="valMin" class="fsel" style="width: 80px;" placeholder="Min ₹" oninput="applyFilters()">
+        <span style="color: #64748b; font-size: 12px;">-</span>
+        <input type="number" id="valMax" class="fsel" style="width: 80px;" placeholder="Max ₹" oninput="applyFilters()">
+      </div>
+      <select class="fsel" id="viewMode" onchange="toggleViewMode()" style="background:#eef2ff; color:#4338ca; border-color:#4338ca; font-weight:600; margin-right:8px;">
+        <option value="indent">View: Indent Wise</option>
+        <option value="item">View: Item Wise</option>
+      </select>
+      <button class="btn-clear" onclick="clearFilters()" style="margin-right:8px;">✕ Clear</button>
+      <button class="btn-action" onclick="openColChooser()" style="margin-right:8px;">⚙ Columns</button>
+      <button class="btn-action" onclick="exportExcel()" style="margin-right:8px;">📥 Export Excel</button>
+      <button class="btn-action" onclick="window.print()" style="margin-right:8px;">🖨 Print</button>
+      <button class="btn-action" style="background:#2563eb; color:white; border:none; padding: 0 12px; height: 36px; font-weight: 500;" onclick="openReportModal()">📊 Detailed Store Report</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table id="mainTable">
+        <thead>
+          <!-- Dynamically populated in renderTable() -->
+        </thead>
+        <tbody id="tableBody">
+          <tr><td colspan="12"><div class="empty"><span class="empty-ico">⏳</span><p>Loading...</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination & Record Count -->
+    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-top:16px;">
+      <div class="pagination" style="margin-top:0;">
+        <span class="page-info" id="pageInfo">—</span>
+        <div class="page-btns" id="pageBtns"></div>
+      </div>
+      <span class="rec-count" id="recCount">—</span>
+    </div>
+  </div>
+</main>
+
+<!-- ── SIDE PANEL ──────────────────────────────────────────────────────── -->
+<div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div>
+<div class="side-panel" id="sidePanel">
+  <div class="panel-header">
+    <div class="panel-title-wrap">
+      <div class="panel-mode" id="panelMode"><span class="panel-mode-dot"></span> NEW RECORD</div>
+      <div class="panel-title" id="panelTitle">Add New Indent</div>
+      <div class="panel-sub" id="panelSub">Fill in the details below. All fields are optional except Description.</div>
+    </div>
+    <button class="panel-close" onclick="closePanel()">×</button>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+  <div class="panel-footer">
+    <span class="panel-footer-left" id="panelFooterInfo">All changes are saved to the database</span>
+    <div class="panel-footer-right">
+      <button class="btn-cancel" onclick="closePanel()">Cancel</button>
+      <button class="btn-save" id="saveBtn" onclick="saveRecord()">
+        <span id="saveBtnIcon">💾</span>
+        <span id="saveBtnText">Save Record</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DELETE CONFIRM ──────────────────────────────────────────────────── -->
+<div class="del-overlay" id="delOverlay">
+  <div class="del-modal">
+    <span class="del-icon">⚠️</span>
+    <div class="del-title">Delete Indent?</div>
+    <div class="del-sub">This action cannot be undone. The following indent will be permanently removed from the database.</div>
+    <div class="del-name" id="delName"></div>
+    <div class="del-btns">
+      <button class="btn-del-cancel" onclick="closeDelete()">Keep It</button>
+      <button class="btn-del-confirm" onclick="confirmDelete()">🗑 Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── COLUMN CHOOSER ──────────────────────────────────────────────────── -->
+<div class="col-overlay" id="colOverlay" onclick="closeColChooser()"></div>
+<div class="col-modal" id="colModal">
+  <div class="col-header">
+    <div class="col-title">Customize Columns</div>
+    <button class="panel-close" onclick="closeColChooser()">×</button>
+  </div>
+  <div class="col-sub" style="display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid #e2e8f0; margin-bottom:12px;">
+    <span>Configuring for:</span>
+    <select id="colStageSelector" onchange="switchColChooserStage()" style="padding:4px 8px; border-radius:6px; border:1px solid #cbd5e1; font-size:13px; background:white;">
+      <option value="default">All Statuses (Default)</option>
+      <option value="balance_indents">Balance Indents to be proposed</option>
+      <option value="proposal_started">Proposal Started</option>
+      <option value="proposal_drafted">Proposal Drafted</option>
+      <option value="proposal_approved">Proposal Approved</option>
+      <option value="vetting">Under Vetting</option>
+      <option value="concurrence">Under Concurrence</option>
+      <option value="pac_signing">PAC Signing</option>
+      <option value="indent_signing">Indent Signing</option>
+      <option value="tender_to_be_published">Tender to Be Published</option>
+      <option value="tender_under_finalisation">Tender Under Finalisation</option>
+      <option value="po">PO Issued / Closed</option>
+      <option value="material_received">Material Received</option>
+    </select>
+  </div>
+  <div class="col-body" id="colBody">
+    <!-- Checkboxes populated dynamically -->
+  </div>
+  <div class="col-footer">
+    <button class="btn-cancel" onclick="resetColsToDefault()" title="Revert to original columns">Reset to Default</button>
+    <button class="btn-save" onclick="saveGlobalCols()" title="Save current selection as the default for everyone">Save as Global Default</button>
+  </div>
+</div>
+
+<!-- ── TOASTS ──────────────────────────────────────────────────────────── -->
+<div class="toast-container" id="toastContainer"></div>
+<!-- Preview Modal -->
+<div class="del-overlay" id="previewOverlay" onclick="if(event.target===this) closePreviewModal()">
+  <div class="del-modal">
+    <div style="font-size:20px;margin-bottom:8px;">Import Preview</div>
+    <div id="previewModalBody" style="font-size:14px;color:#475569;margin-bottom:24px;line-height:1.5;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:12px;">
+      <button class="btn-cancel" onclick="closePreviewModal()">Cancel</button>
+      <button class="btn-primary" onclick="confirmImport()">Confirm & Import</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+// ── FIELD DEFINITIONS ──────────────────────────────────────────────────────
+const FIELDS = [
+  { key:'description',  label:'Description of Items',  type:'textarea', required:true, span2:true },
+  { key:'items_count',  label:'No. of Items in Indent', type:'number' },
+  { key:'safety_item',  label:'Item Category',            type:'select', options:['Safety Item','General Item','Machine Item'] },
+  { key:'priority',     label:'Priority',               type:'select', options:['Emergency','Urgent','High','Normal','Low'] },
+  { key:'qty_required', label:'Quantity Required',      type:'textarea' },
+  { key:'purchase_unit',label:'Purchase Unit',          type:'select', options:['UBL','SBC'] },
+  { key:'indent_value', label:'Indent Value',           type:'number' },
+  { key:'approving_authority', label:'Approving Authority', type:'select', options:['JE','SSE','AXEN','XEN','Dy.CE','CE','PCE'] },
+  { key:'eoffice_required',   label:'E-Office Required',   type:'select', options:['Yes','No'] },
+  { key:'vetting_required',   label:'Vetting Required',    type:'select', options:['Yes','No'] },
+  { key:'concurrence_required',label:'Concurrence Required',type:'select',options:['Yes','No'] },
+  { key:'pac_required',       label:'PAC Required',        type:'select', options:['Yes','No'] },
+  { key:'pac_approving_authority', label:'PAC Approving Authority', type:'select', options:['JE','SSE','AXEN','XEN','Dy.CE','CE','PCE'] },
+  { key:'indent_signing_authority', label:'Indent Signing Authority', type:'select', options:['JE','SSE','AXEN','XEN','Dy.CE','CE','PCE'] },
+  { key:'indent_approved',    label:'Indent Approved',     type:'select', options:['Yes','No'] },
+  { key:'indent_no',          label:'Indent No',           type:'text' },
+  { key:'indent_date',        label:'Indent Date',         type:'date' },
+  { key:'sent_vetting_on',    label:'Sent for Vetting On', type:'date' },
+  { key:'sent_concurrence_on',label:'Sent for Concurrence On', type:'date' },
+  { key:'sent_store_on',      label:'Sent to Store On',    type:'date' },
+  { key:'likely_supplier',    label:'Likely Supplier',     type:'text' },
+  { key:'tender_no',          label:'Tender No',           type:'text' },
+  { key:'tender_published_date', label:'Tender Published Date', type:'date' },
+  { key:'tender_opening_date', label:'Tender Opening Date', type:'date' },
+  { key:'po_number',          label:'PO Number',           type:'text' },
+  { key:'po_date',            label:'PO Date',             type:'date' },
+  { key:'firm_name',          label:'Firm Name',           type:'text' },
+  { key:'firm_contact',       label:'Firm Contact Details',type:'textarea', span2:true },
+  { key:'delivery_schedule',  label:'Delivery Schedule',   type:'date' },
+  { key:'qty_received',       label:'Qty Received',        type:'text' },
+  { key:'qty_pending',        label:'Qty Pending',         type:'text' },
+  { key:'current_status',     label:'Current Status',      type:'select', required:true,
+    options:['Balance Indents to be proposed','Proposal Started','Proposal Drafted','Proposal Approved','Under Vetting','Under Concurrence','PAC Signing','Indent Signing','Tender to Be Published','Tender Under Finalisation','PO Issued Pending Receipt','Material Received'] },
+  { key:'current_holder',     label:'Current Holder',      type:'select',
+    options:['JE','SSE','AXEN','XEN','Dy.CE','CE','PCE','Sr.DFM','Concurrence','Stores','Stores-UBL','Stores-SBC','Tender Committee','Vendor'] },
+  { key:'status_entry_date',  label:'Status Entry Date',   type:'date' },
+  { key:'days_in_status',     label:'Days in Current Status', type:'number' },
+  { key:'last_updated_by',    label:'Last Updated By',     type:'text' },
+  { key:'last_updated_on',    label:'Last Updated On',     type:'date', readonly:true },
+  { key:'remarks',            label:'Remarks',             type:'textarea', span2:true },
+  { key:'is_abnormal',        label:'Abnormal Case?',      type:'select', options:['No', 'Yes'] },
+  { key:'abnormal_reason',    label:'Abnormal Reason',     type:'select', options:['','Returned','Retender','PO Cancelled','Supplier Refused','Clarification Required','Rate Issue','Technical Issue','DP Extension','Other'] },
+  { key:'abnormal_reason_other', label:'Other Reason (Please specify)', type:'text' }
+];
+
+// ── SECTIONS ───────────────────────────────────────────────────────────────
+const SECTIONS = [
+  { title:'Basic Information',  icon:'📋', color:'rgba(249,115,22,.12)',  fields:['description','safety_item','priority'] },
+  { title:'Indent Details',     icon:'📝', color:'rgba(251,191,36,.10)',  fields:['purchase_unit','approving_authority','eoffice_required','vetting_required','concurrence_required','pac_required','pac_approving_authority','indent_signing_authority','indent_approved','indent_no','indent_date'] },
+  { title:'Processing',         icon:'⚙️', color:'rgba(30,58,95,.30)',    fields:['sent_vetting_on','sent_concurrence_on','sent_store_on','likely_supplier','tender_no','tender_published_date','tender_opening_date'] },
+  { title:'Purchase Order',     icon:'📦', color:'rgba(194,65,12,.15)',   fields:['po_number','po_date','firm_name','firm_contact','delivery_schedule'] },
+  { title:'Status Tracking',    icon:'📊', color:'rgba(16,185,129,.12)',  fields:['current_status','current_holder','status_entry_date','days_in_status','last_updated_by','last_updated_on'] },
+  { title:'Abnormal Tracking',  icon:'⚠️', color:'rgba(239,68,68,.12)',   fields:['is_abnormal','abnormal_reason','abnormal_reason_other'] },
+  { title:'Remarks',            icon:'💬', color:'rgba(251,146,60,.12)',  fields:['remarks'] },
+];
+
+const STATUS_ORDER = ['Balance Indents to be proposed','Proposal Started','Proposal Drafted','Proposal Approved','Under Vetting','Under Concurrence','PAC Signing','Indent Signing','Tender to Be Published','Tender Under Finalisation','PO Issued Pending Receipt','Material Received'];
+const STATUS_CLS = {'Balance Indents to be proposed':'s0','Proposal Started':'s1','Proposal Drafted':'s2','Proposal Approved':'s3','Under Vetting':'s4','Under Concurrence':'s5','PAC Signing':'s13','Indent Signing':'s10','Tender to Be Published':'s6','Tender Under Finalisation':'s7','PO Issued Pending Receipt':'s8','Material Received':'s9'};
+
+// ── STAGE-BASED FIELD VISIBILITY CONFIG ────────────────────────────────────
+const STAGE_FIELDS = {
+  'Balance Indents to be proposed': {
+    editable: ['description','items_count','qty_required','safety_item','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: []
+  },
+  'Proposal Started': {
+    editable: ['purchase_unit','approving_authority','eoffice_required','vetting_required','concurrence_required','pac_required','pac_approving_authority','indent_value','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['description','items_count','safety_item','qty_required','indent_signing_authority']
+  },
+  'Proposal Drafted': {
+    editable: ['purchase_unit','approving_authority','eoffice_required','vetting_required','concurrence_required','pac_required','pac_approving_authority','indent_signing_authority','indent_value','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['description','items_count','safety_item','qty_required']
+  },
+  'Proposal Approved': {
+    editable: ['indent_approved','indent_signing_authority','indent_no','indent_date','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['description','items_count','safety_item','priority','qty_required','purchase_unit','approving_authority','eoffice_required','vetting_required','concurrence_required','pac_required','pac_approving_authority','indent_value']
+  },
+  'PAC Signing': {
+    editable: ['pac_approving_authority','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['description','safety_item','priority','indent_no']
+  },
+  'Indent Signing': {
+    editable: ['indent_signing_authority','eoffice_required','vetting_required','concurrence_required','pac_required','indent_approved','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['description','safety_item','priority','indent_no']
+  },
+  'Under Vetting': {
+    editable: ['sent_vetting_on','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['indent_no','indent_date','indent_signing_authority']
+  },
+  'Under Concurrence': {
+    editable: ['sent_concurrence_on','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['indent_no','indent_date','indent_signing_authority']
+  },
+  'Tender to Be Published': {
+    editable: ['sent_store_on','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['indent_no','indent_signing_authority']
+  },
+  'Tender Under Finalisation': {
+    editable: ['tender_no', 'tender_published_date','tender_opening_date','likely_supplier','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['indent_no','indent_signing_authority']
+  },
+  'PO Issued Pending Receipt': {
+    editable: ['po_number','po_date','firm_name','firm_contact','delivery_schedule','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['description','safety_item','priority','indent_no','tender_no','tender_published_date','tender_opening_date','likely_supplier']
+  },
+  'Material Received': {
+    editable: ['qty_received','qty_pending','current_status','current_holder','status_entry_date','days_in_status','last_updated_by','is_abnormal','abnormal_reason','abnormal_reason_other','remarks'],
+    readonly: ['description','safety_item','priority','indent_no','po_number','po_date','firm_name','firm_contact','delivery_schedule']
+  }
+};
+
+let showAllFields = false; // Toggle for admin override
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+let allRecords = [], filtered = [], flattenedItems = [], curTab = 'all', sortField = 'id', sortDir = 1;
+let isItemView = false;
+let page = 1; const PER_PAGE = 25;
+let editId = null, deleteId = null;
+let searchTimer = null;
+
+// — GLOBALS —
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyuySA7eXZSZIzalvo6IwOofDn20dHZZcP5kJ27fD1K1lPiwv6wzfEE3EKnsLbjiHqWwQ/exec';
+
+async function syncToGoogleSheets() {
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'save_all', data: allRecords }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+    });
+    const result = await res.json();
+    if (result.error) throw new Error(result.error);
+    return true;
+  } catch (err) {
+    console.error('Sync failed:', err);
+    toast('Sync to Google Sheets failed. Changes saved locally only.', 'error');
+    return false;
+  }
+}
+
+// — CLIENT SIDE CALCULATIONS —
+function calcStats(records) {
+  let safety = 0, po = 0, mat = 0, bal = 0, tender = 0;
+  records.forEach(r => {
+    if (r.safety_item === 'Safety Item') safety++;
+    if (r.current_status === 'PO Issued Pending Receipt') po++;
+    if (r.current_status === 'Material Received') mat++;
+    if (r.current_status === 'Balance Indents to be proposed') bal++;
+    if (['Tender to Be Published','Tender Under Finalisation'].includes(r.current_status)) tender++;
+  });
+  return { total: records.length, safety, po_issued: po, material_received: mat, balance_indents: bal, tender_phase: tender };
+}
+
+function extractMeta(records) {
+  const units = new Set();
+  const holders = new Set();
+  records.forEach(r => {
+    if (r.purchase_unit) units.add(r.purchase_unit);
+    if (r.current_holder) holders.add(r.current_holder);
+  });
+  return {
+    units: Array.from(units).sort(),
+    holders: Array.from(holders).sort()
+  };
+}
+
+// — INIT —
+async function init() {
+  const isAuth = localStorage.getItem('swr_loggedIn') === 'true';
+  if (!isAuth) {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    return;
+  }
+  
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  try {
+    const gasRes = await fetch(APPS_SCRIPT_URL).then(r => r.json());
+    allRecords = gasRes.records || [];
+    renderStats(calcStats(allRecords));
+    applyFilters();
+    
+    const meta = extractMeta(allRecords);
+    const uSel = document.getElementById('unitFilter');
+    uSel.innerHTML = '<option value="">All Units</option>';
+    meta.units.forEach(u => { const o = document.createElement('option'); o.textContent = u; uSel.appendChild(o); });
+    const hSel = document.getElementById('holderFilter');
+    hSel.innerHTML = '<option value="">All Holders</option>';
+    meta.holders.forEach(h => { const o = document.createElement('option'); o.textContent = h; hSel.appendChild(o); });
+  } catch(e) {
+    console.error(e);
+    toast('Failed to load initial data from Google Sheets', 'error');
+  }
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const u = document.getElementById('loginUser').value;
+  const p = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginError');
+  
+  if (u === 'admin' && p === 'swr123') {
+    err.style.display = 'none';
+    localStorage.setItem('swr_loggedIn', 'true');
+    init();
+  } else {
+    err.style.display = 'block';
+    err.textContent = 'Invalid credentials';
+  }
+}
+
+async function handleLogout() {
+  localStorage.removeItem('swr_loggedIn');
+  window.location.reload();
+}
+
+let activeCardId = 'all';
+
+// ── STATS ──────────────────────────────────────────────────────────────────
+function renderStats(s) {
+  const totalLineItems = allRecords.reduce((sum, r) => sum + (parseInt(r.items_count)||0), 0);
+  const items = [
+    { l:'Total Records',      v:`${s.total} <span style="font-size:20px; color:#64748b; font-weight:600;">/ ${totalLineItems}</span>`, sub:'Indents / Items', cc:'#2563eb', scg:'rgba(37,99,235,.08)',  icon:'🚂', cardId:'all' },
+    { l:'Safety Indents',       v:s.safety,           sub:'Flagged critical',   cc:'#dc2626', scg:'rgba(220,38,38,.08)',   icon:'🔴', cardId:'safety' },
+    { l:'PO Issued',          v:s.po_issued,        sub:'Pending receipt',    cc:'#d97706', scg:'rgba(217,119,6,.06)',  icon:'📦', cardId:'po' },
+    { l:'Material Received',  v:s.material_received,sub:'Delivery complete',  cc:'#059669', scg:'rgba(5,150,105,.06)',  icon:'✅', cardId:'material' },
+    { l:'Balance Indents to be proposed', v:s.balance_indents, sub:'Awaiting proposal',  cc:'#ea580c', scg:'rgba(234,88,12,.06)',  icon:'📩', cardId:'demand' },
+    { l:'Tender Phase',       v:s.tender_phase,     sub:'In tendering',       cc:'#1e3a5f', scg:'rgba(30,58,95,.10)',    icon:'📜', cardId:'tender' },
+  ];
+  document.getElementById('statsGrid').innerHTML = items.map(s => {
+    const isActive = (s.cardId === activeCardId) ? 'active' : '';
+    return `<div id="card_${s.cardId}" class="stat-card ${isActive}" style="--sc:${s.cc};--sc-glow:${s.scg}; cursor:pointer;" onclick="setCardFilter('${s.cardId}')">
+      <span class="stat-icon">${s.icon}</span>
+      <div class="stat-val">${s.v}</div>
+      <div class="stat-label">${s.l}</div>
+      <div class="stat-sub">${s.sub}</div>
+    </div>`;
+  }).join('');
+}
+
+function setCardFilter(type) {
+  activeCardId = type;
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+  const ac = document.getElementById(`card_${type}`);
+  if (ac) ac.classList.add('active');
+
+  curTab = 'all';
+  document.getElementById('statusFilter').value = '';
+  document.getElementById('unitFilter').value = '';
+  document.getElementById('holderFilter').value = '';
+  document.getElementById('abnormalFilter').value = '';
+  document.getElementById('valueRangeFilter').value = '';
+  document.getElementById('valMin').value = '';
+  document.getElementById('valMax').value = '';
+  document.getElementById('customValueInputs').style.display = 'none';
+  document.getElementById('globalSearch').value = '';
+
+  if (type === 'safety') curTab = 'safety';
+  else if (type === 'po') document.getElementById('statusFilter').value = 'PO Issued Pending Receipt';
+  else if (type === 'tender') document.getElementById('statusFilter').value = 'tender_phase';
+  else if (type === 'material') document.getElementById('statusFilter').value = 'Material Received';
+  else if (type === 'demand') document.getElementById('statusFilter').value = 'Balance Indents to be proposed';
+
+  document.querySelectorAll('.chip').forEach(c => {
+    c.classList.remove('active');
+    if (c.dataset.tab === curTab || (type === 'all' && c.dataset.tab === 'all')) c.classList.add('active');
+  });
+
+  applyFilters();
+}
+
+// ── TABS ───────────────────────────────────────────────────────────────────
+function setTab(tab, el) {
+  curTab = tab;
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.tab === tab));
+  page = 1; applyFilters();
+}
+function setTabById(tab) {
+  const el = document.querySelector(`.chip[data-tab="${tab}"]`);
+  if (el) setTab(tab, el);
+}
+
+// ── FILTERS & SORT ─────────────────────────────────────────────────────────
+function onSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(applyFilters, 250);
+}
+
+function toggleViewMode() {
+  isItemView = document.getElementById('viewMode').value === 'item';
+  applyFilters();
+}
+
+function handleValueRangeChange() {
+  const range = document.getElementById('valueRangeFilter').value;
+  document.getElementById('customValueInputs').style.display = (range === 'custom') ? 'flex' : 'none';
+  applyFilters();
+}
+
+function applyFilters() {
+  const q = document.getElementById('globalSearch').value.toLowerCase().trim();
+  const st = document.getElementById('statusFilter').value;
+  const un = document.getElementById('unitFilter').value;
+  const ho = document.getElementById('holderFilter').value;
+  const abnFilter = document.getElementById('abnormalFilter').value;
+
+  let newActiveCardId = 'all';
+  if (!q && !un && !ho && (!abnFilter || abnFilter==='')) {
+    if (curTab === 'safety') newActiveCardId = 'safety';
+    else if (curTab === 'all' && st === 'PO Issued Pending Receipt') newActiveCardId = 'po';
+    else if (curTab === 'all' && st === 'tender_phase') newActiveCardId = 'tender';
+    else if (curTab === 'all' && st === 'Material Received') newActiveCardId = 'material';
+    else if (curTab === 'all' && st === 'Balance Indents to be proposed') newActiveCardId = 'demand';
+  }
+  activeCardId = newActiveCardId;
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+  const ac = document.getElementById(`card_${activeCardId}`);
+  if (ac) ac.classList.add('active');
+
+  filtered = allRecords.filter(r => {
+    if (curTab === 'safety' && r.safety_item !== 'Safety Item') return false;
+    if (curTab === 'general' && r.safety_item !== 'General Item') return false;
+    if (curTab === 'machine' && r.safety_item !== 'Machine Item') return false;
+    if (curTab === 'priority' && !(r.priority == 1 || r.priority === 'High' || r.priority === '1')) return false;
+    if (st === 'tender_phase') {
+      const tenderPhases = ['Tender Published','Tender to Be Published','Tender Under Finalisation'];
+      const hasTenderPhase = tenderPhases.includes(r.current_status) || (r.line_items && r.line_items.some(li => tenderPhases.includes(li.current_status || r.current_status)));
+      if (!hasTenderPhase) return false;
+    }
+    if (st && st !== 'tender_phase') {
+      const hasMatch = r.current_status === st || (r.line_items && r.line_items.some(li => (li.current_status || r.current_status) === st));
+      if (!hasMatch) return false;
+    }
+    if (un && r.purchase_unit !== un) return false;
+    if (ho && r.current_holder !== ho) return false;
+    
+    const abnFilter = document.getElementById('abnormalFilter').value;
+    if (abnFilter === 'Yes' && r.is_abnormal !== 'Yes') return false;
+    if (abnFilter === 'No' && r.is_abnormal === 'Yes') return false;
+
+    const valRange = document.getElementById('valueRangeFilter').value;
+    if (valRange) {
+      let indentVal = 0;
+      if (r.indent_value) {
+        let cleanStr = String(r.indent_value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+        if (cleanStr) indentVal = Number(cleanStr[0]);
+      }
+      if (valRange === 'u1L' && indentVal >= 100000) return false;
+      if (valRange === '1L-10L' && (indentVal < 100000 || indentVal > 1000000)) return false;
+      if (valRange === '10L-1Cr' && (indentVal < 1000000 || indentVal > 10000000)) return false;
+      if (valRange === 'o1Cr' && indentVal <= 10000000) return false;
+      if (valRange === 'custom') {
+        const vMin = parseFloat(document.getElementById('valMin').value) || 0;
+        const vMax = parseFloat(document.getElementById('valMax').value) || Infinity;
+        if (indentVal < vMin || indentVal > vMax) return false;
+      }
+    }
+
+    if (q) {
+      const hay = [r.description, r.firm_name, r.indent_no, r.po_number,
+        r.current_status, r.current_holder, r.purchase_unit, String(r.id),
+        r.remarks, r.firm_contact].join(' ').toLowerCase();
+      let liHay = '';
+      if (r.line_items && Array.isArray(r.line_items)) {
+        liHay = r.line_items.map(li => li.item_desc).join(' ').toLowerCase();
+      }
+      return hay.includes(q) || liHay.includes(q);
+    }
+    return true;
+  });
+
+  flattenedItems = [];
+  if (isItemView) {
+    filtered.forEach(r => {
+      const items = Array.isArray(r.line_items) && r.line_items.length > 0 ? r.line_items : [ { item_desc: r.description, qty_required: r.qty_required, rate: null, qty_received: '', qty_pending: '' } ];
+      items.forEach((li, idx) => {
+        const liHay = [li.item_desc, li.qty_required, li.rate].join(' ').toLowerCase();
+        const parentHay = [r.description, r.firm_name, r.indent_no, r.po_number, r.current_status, r.current_holder, r.purchase_unit, String(r.id), r.remarks, r.firm_contact].join(' ').toLowerCase();
+        if (!q || liHay.includes(q) || parentHay.includes(q)) {
+           flattenedItems.push({
+             ...r,
+             is_flattened_item: true,
+             parent_id: r.id,
+             id: r.id,
+             item_idx: idx,
+             description: li.item_desc || '',
+             indent_no: r.indent_no || '',
+             qty_required: li.qty_required || '',
+             rate: li.rate || '',
+             amount: li.rate && li.qty_required ? Math.round(parseFloat(li.qty_required)*parseFloat(li.rate)) : '',
+             qty_received: li.qty_received || '',
+             qty_pending: li.qty_pending || '',
+             current_status: li.current_status || r.current_status || '',
+             current_holder: r.current_holder || ''
+           });
+        }
+      });
+    });
+
+    flattenedItems.sort((a, b) => {
+      let av = a[sortField], bv = b[sortField];
+      if (av == null) av = ''; if (bv == null) bv = '';
+      if (av !== '' && bv !== '' && !isNaN(av) && !isNaN(bv)) {
+        return (Number(av) - Number(bv)) * sortDir;
+      }
+      return String(av).localeCompare(String(bv)) * sortDir;
+    });
+  }
+
+  filtered.sort((a, b) => {
+    let av = a[sortField], bv = b[sortField];
+    if (av == null) av = ''; if (bv == null) bv = '';
+    if (av !== '' && bv !== '' && !isNaN(av) && !isNaN(bv)) {
+      return (Number(av) - Number(bv)) * sortDir;
+    }
+    return String(av).localeCompare(String(bv)) * sortDir;
+  });
+
+  const filteredItems = filtered.reduce((sum, r) => sum + (parseInt(r.items_count)||0), 0);
+  const displayCount = isItemView ? flattenedItems.length : filtered.length;
+  document.getElementById('recCount').innerHTML = `${displayCount} / ${isItemView ? allRecords.reduce((sum, r) => sum + (parseInt(r.items_count)||0), 0) : allRecords.length} ${isItemView ? 'items' : 'records'} &nbsp;|&nbsp; <strong>${filteredItems}</strong> items`;
+  page = 1;
+  renderTable();
+  renderPagination();
+}
+
+function sortBy(f) {
+  if (sortField === f) sortDir = -sortDir; else { sortField = f; sortDir = 1; }
+  applyFilters();
+}
+
+function clearFilters() {
+  document.getElementById('globalSearch').value = '';
+  document.getElementById('statusFilter').value = '';
+  document.getElementById('unitFilter').value = '';
+  document.getElementById('holderFilter').value = '';
+  document.getElementById('abnormalFilter').value = '';
+  document.getElementById('valueRangeFilter').value = '';
+  document.getElementById('valMin').value = '';
+  document.getElementById('valMax').value = '';
+  document.getElementById('customValueInputs').style.display = 'none';
+  curTab = 'all';
+  activeCardId = 'all';
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+  const ac = document.getElementById('card_all');
+  if (ac) ac.classList.add('active');
+  document.querySelectorAll('.chip').forEach((c, i) => c.classList.toggle('active', i === 0));
+  applyFilters();
+}
+
+// ── RENDER TABLE ───────────────────────────────────────────────────────────
+const COL_VIEWS = {
+  default: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'260px' },
+    { k:'items_count', l:'Items' },
+    { k:'safety_item', l:'Item Category' },
+    { k:'current_status', l:'Status', mw:'170px' },
+    { k:'current_holder', l:'Holder' },
+    { k:'remarks', l:'Remarks', mw:'200px' }
+  ],
+  balance_indents: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'260px' },
+    { k:'items_count', l:'No. of Items' },
+    { k:'qty_required', l:'Qty Required', mw:'140px' },
+    { k:'safety_item', l:'Item Category' },
+    { k:'remarks', l:'Remarks', mw:'200px' }
+  ],
+  proposal_started: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'260px' },
+    { k:'items_count', l:'No. of Items' },
+    { k:'qty_required', l:'Qty Required', mw:'140px' },
+    { k:'safety_item', l:'Item Category' },
+    { k:'indent_value', l:'Indent Val' },
+    { k:'remarks', l:'Remarks', mw:'150px' }
+  ],
+  proposal_drafted: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'220px' },
+    { k:'safety_item', l:'Item Category' },
+    { k:'items_count', l:'Items' },
+    { k:'qty_required', l:'Qty Req' },
+    { k:'indent_value', l:'Indent Val' },
+    { k:'approving_authority', l:'Appr Auth' },
+    { k:'vetting_required', l:'Vetting Required' },
+    { k:'concurrence_required', l:'Concurrence Required' },
+    { k:'indent_signing_authority', l:'Signing Auth' },
+    { k:'eoffice_required', l:'E-Office Required' },
+    { k:'remarks', l:'Remarks' }
+  ],
+  proposal_approved: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'220px' },
+    { k:'safety_item', l:'Item Category' },
+    { k:'items_count', l:'Items' },
+    { k:'qty_required', l:'Qty Req' },
+    { k:'indent_value', l:'Indent Val' },
+    { k:'approving_authority', l:'Appr Auth' },
+    { k:'vetting_required', l:'Vetting Required' },
+    { k:'concurrence_required', l:'Concurrence Required' },
+    { k:'indent_signing_authority', l:'Signing Auth' },
+    { k:'remarks', l:'Remarks' }
+  ],
+  indent_signing: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'260px' },
+    { k:'items_count', l:'No. of Items' },
+    { k:'safety_item', l:'Item Category' },
+    { k:'indent_value', l:'Indent Val' },
+    { k:'indent_signing_authority', l:'Signing Auth' },
+    { k:'indent_no', l:'Indent No' },
+    { k:'indent_date', l:'Indent Date' },
+    { k:'current_holder', l:'Holder' },
+    { k:'remarks', l:'Remarks', mw:'200px' }
+  ],
+  vetting: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'220px' },
+    { k:'items_count', l:'No. of Items' },
+    { k:'indent_no', l:'Indent No' },
+    { k:'indent_date', l:'Indent Date' },
+    { k:'sent_vetting_on', l:'Sent to Vetting On' },
+    { k:'remarks', l:'Remarks' }
+  ],
+  concurrence: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'220px' },
+    { k:'items_count', l:'No. of Items' },
+    { k:'indent_no', l:'Indent No' },
+    { k:'indent_date', l:'Indent Date' },
+    { k:'sent_concurrence_on', l:'Sent to Concurrence On' },
+    { k:'remarks', l:'Remarks' }
+  ],
+  pac_signing: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'220px' },
+    { k:'items_count', l:'No. of Items' },
+    { k:'indent_no', l:'Indent No' },
+    { k:'indent_date', l:'Indent Date' },
+    { k:'pac_required', l:'PAC Req' },
+    { k:'pac_approving_authority', l:'PAC Auth' },
+    { k:'remarks', l:'Remarks' }
+  ],
+  tender_to_be_published: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'220px' },
+    { k:'indent_no', l:'Indent No' },
+    { k:'qty_required', l:'Qty Required', mw:'140px' },
+    { k:'sent_store_on', l:'Sent Store' },
+    { k:'purchase_unit', l:'Purchase Unit' },
+    { k:'current_holder', l:'Holder' },
+    { k:'remarks', l:'Remarks', mw:'200px' }
+  ],
+  tender_under_finalisation: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'220px' },
+    { k:'indent_no', l:'Indent No' },
+    { k:'tender_no', l:'Tender No' },
+    { k:'tender_published_date', l:'Tender Date' },
+    { k:'tender_opening_date', l:'Tender Opening' },
+    { k:'likely_supplier', l:'Supplier' },
+    { k:'current_holder', l:'Holder' },
+    { k:'remarks', l:'Remarks', mw:'200px' }
+  ],
+  po: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'220px' },
+    { k:'items_count', l:'Items' },
+    { k:'po_number', l:'PO Number' },
+    { k:'po_date', l:'PO Date' },
+    { k:'firm_name', l:'Firm Name' },
+    { k:'delivery_schedule', l:'Delivery' },
+    { k:'qty_required', l:'Qty Req' },
+    { k:'qty_received', l:'Qty Rcvd' },
+    { k:'qty_pending', l:'Qty Pend' },
+    { k:'current_holder', l:'Holder' },
+    { k:'remarks', l:'Remarks', mw:'150px' }
+  ],
+  material_received: [
+    { k:'id', l:'Sl. No.' },
+    { k:'description', l:'Description', mw:'220px' },
+    { k:'po_number', l:'PO Number' },
+    { k:'po_date', l:'PO Date' },
+    { k:'qty_required', l:'Qty Req' },
+    { k:'qty_received', l:'Qty Rcvd' },
+    { k:'remarks', l:'Remarks', mw:'150px' }
+  ]
+};
+
+let globalColsConfig = {};
+let currentChooserOrder = [];
+
+// ── COLUMN CHOOSER ────────────────────────────────────────────────────────
+let currentConfigKey = 'default';
+
+function openColChooser() {
+  const st = document.getElementById('statusFilter').value;
+  
+  if (!document.getElementById('colOverlay').classList.contains('open')) {
+    currentConfigKey = 'default';
+    if (!st) {
+      if (curTab === 'po') currentConfigKey = 'po';
+    } else if (st === 'Balance Indents to be proposed') currentConfigKey = 'balance_indents';
+    else if (st === 'Proposal Started') currentConfigKey = 'proposal_started';
+    else if (st === 'Proposal Drafted') currentConfigKey = 'proposal_drafted';
+    else if (st === 'Proposal Approved') currentConfigKey = 'proposal_approved';
+    else if (st === 'Under Vetting') currentConfigKey = 'vetting';
+    else if (st === 'Under Concurrence') currentConfigKey = 'concurrence';
+    else if (st === 'PAC Signing') currentConfigKey = 'pac_signing';
+    else if (st === 'Tender to Be Published') currentConfigKey = 'tender_to_be_published';
+    else if (st === 'Tender Under Finalisation') currentConfigKey = 'tender_under_finalisation';
+    else if (st === 'Material Received') currentConfigKey = 'material_received';
+    else if (st === 'Indent Signing') currentConfigKey = 'indent_signing';
+    else if (st.includes('Proposal')) currentConfigKey = 'proposal_drafted';
+    else if (st.includes('PO ') || st === 'Closed') currentConfigKey = 'po';
+    
+    document.getElementById('colStageSelector').value = currentConfigKey;
+  } else {
+    currentConfigKey = document.getElementById('colStageSelector').value;
+  }
+
+  // Get base cols from global or defaults
+  let activeCols = [];
+  if (globalColsConfig && globalColsConfig[currentConfigKey]) {
+    activeCols = globalColsConfig[currentConfigKey].map(c => c.k);
+  } else {
+    activeCols = (COL_VIEWS[currentConfigKey] || COL_VIEWS.default).map(c => c.k);
+  }
+  currentChooserOrder = [...activeCols];
+  
+  // All possible column keys
+  const allPossibleCols = [
+    { k: 'id', l: 'Sl. No.' },
+    ...FIELDS.map(f => ({ k: f.key, l: f.label })),
+    { k: 'rate', l: 'Rate (₹)' },
+    { k: 'amount', l: 'Amount (₹)' },
+    { k: 'qty_received', l: 'Qty Rcvd' },
+    { k: 'qty_pending', l: 'Qty Pend' },
+    { k: 'abnormal_reason', l: 'Abnormal Reason' },
+    { k: 'last_updated_on', l: 'Last Updated' },
+    { k: 'last_updated_by', l: 'Updated By' }
+  ];
+
+  // Remove duplicates
+  const uniqueCols = [];
+  const seen = new Set();
+  for (let c of allPossibleCols) {
+    if (!seen.has(c.k)) {
+      seen.add(c.k);
+      uniqueCols.push(c);
+    }
+  }
+
+  let html = '';
+  uniqueCols.forEach(c => {
+    const isChecked = activeCols.includes(c.k) ? 'checked' : '';
+    html += `
+      <label class="col-item">
+        <input type="checkbox" value="${c.k}" data-label="${c.l}" ${isChecked} />
+        <span>${c.l}</span>
+      </label>
+    `;
+  });
+
+  document.getElementById('colBody').innerHTML = html;
+  
+  document.querySelectorAll('#colBody input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', function(e) {
+      if (this.checked) {
+        if (!currentChooserOrder.includes(this.value)) currentChooserOrder.push(this.value);
+      } else {
+        currentChooserOrder = currentChooserOrder.filter(k => k !== this.value);
+      }
+      previewColumns();
+    });
+  });
+
+  document.getElementById('colOverlay').classList.add('open');
+  document.getElementById('colModal').classList.add('open');
+}
+
+function switchColChooserStage() {
+  // when dropdown changes, re-render the modal body
+  openColChooser();
+}
+
+function closeColChooser() {
+  document.getElementById('colOverlay').classList.remove('open');
+  document.getElementById('colModal').classList.remove('open');
+}
+
+function previewColumns() {
+  // Read all checked boxes in the order they were selected
+  const selected = [];
+  let hasRemarks = false;
+  let remarksLabel = 'Remarks';
+
+  currentChooserOrder.forEach(k => {
+    if (k === 'remarks') {
+      hasRemarks = true;
+      const cb = document.querySelector(`#colBody input[value="remarks"]`);
+      if (cb) remarksLabel = cb.getAttribute('data-label');
+      return;
+    }
+    const cb = document.querySelector(`#colBody input[value="${k}"]`);
+    if (cb && cb.checked) {
+      selected.push({ k: cb.value, l: cb.getAttribute('data-label'), mw: '150px' });
+    }
+  });
+
+  if (hasRemarks) {
+    const cb = document.querySelector(`#colBody input[value="remarks"]`);
+    if (cb && cb.checked) {
+      selected.push({ k: 'remarks', l: remarksLabel, mw: '200px' });
+    }
+  }
+  
+  // We apply this directly to the globalColsConfig in memory for preview
+  globalColsConfig[currentConfigKey] = selected;
+  renderTable(); // instantly re-render the table
+}
+
+function resetColsToDefault() {
+  let configKey = 'default';
+  const st = document.getElementById('statusFilter').value;
+  if (st) {
+     const matchedKey = Object.keys(COL_VIEWS).find(k => k.toLowerCase() === st.toLowerCase().replace(/ /g, '_'));
+     if (matchedKey && COL_VIEWS[matchedKey]) configKey = matchedKey;
+  } else if (curTab === 'po') configKey = 'po';
+  
+  if (globalColsConfig[configKey]) {
+    delete globalColsConfig[configKey];
+  }
+  
+  // Re-open UI to refresh checkboxes
+  openColChooser();
+  renderTable();
+}
+
+async function saveGlobalCols() {
+  previewColumns(); // Ensure memory has latest
+  
+  const btn = document.querySelector('.col-footer .btn-save');
+  const ogText = btn.textContent;
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  try {
+    // Note: In this GAS version, we'd need a way to persist these
+    toast('Global defaults saved (locally in session)', 'success');
+    closeColChooser();
+  } catch (e) {
+    toast('Error saving columns: ' + e.message, 'error');
+  } finally {
+    btn.textContent = ogText;
+    btn.disabled = false;
+  }
+}
+
+function getActiveCols() {
+  const st = document.getElementById('statusFilter').value;
+  let baseCols;
+  
+  // Determine which config key we are looking at
+  let configKey = 'default';
+  if (!st) {
+    if (curTab === 'po') configKey = 'po';
+    else configKey = 'default';
+  } else if (st === 'Balance Indents to be proposed') configKey = 'balance_indents';
+  else if (st === 'Proposal Started') configKey = 'proposal_started';
+  else if (st === 'Proposal Drafted') configKey = 'proposal_drafted';
+  else if (st === 'Proposal Approved') configKey = 'proposal_approved';
+  else if (st === 'Under Vetting') configKey = 'vetting';
+  else if (st === 'Under Concurrence') configKey = 'concurrence';
+  else if (st === 'PAC Signing') configKey = 'pac_signing';
+  else if (st === 'Tender to Be Published') configKey = 'tender_to_be_published';
+  else if (st === 'Tender Under Finalisation') configKey = 'tender_under_finalisation';
+  else if (st === 'Material Received') configKey = 'material_received';
+  else if (st === 'Indent Signing') configKey = 'indent_signing';
+  else if (st.includes('Proposal')) configKey = 'proposal_drafted';
+  else if (st.includes('PO ') || st === 'Closed') configKey = 'po';
+
+  // 1. Check if we have global backend config for this key
+  if (globalColsConfig && globalColsConfig[configKey]) {
+    baseCols = globalColsConfig[configKey];
+  } else {
+    // 2. Fallback to hardcoded defaults
+    baseCols = COL_VIEWS[configKey] || COL_VIEWS.default;
+  }
+
+  const abnFilter = document.getElementById('abnormalFilter').value;
+  if (abnFilter === 'Yes') {
+    // Append the Abnormal Reason column
+    baseCols = [...baseCols, { k:'abnormal_reason', l:'Abnormal Reason', mw:'180px' }];
+  }
+  
+  if (!isItemView) {
+    baseCols = baseCols.filter(c => c.k !== 'rate' && c.k !== 'amount');
+  }
+  
+  return baseCols;
+}
+
+function formatDate(val) {
+  if (!val) return '—';
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return esc(val);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const thead = document.querySelector('#mainTable thead');
+  const displayList = isItemView ? flattenedItems : filtered;
+  const start = (page - 1) * PER_PAGE;
+  const pageRecs = displayList.slice(start, start + PER_PAGE);
+  const cols = getActiveCols();
+
+  // Render Headers dynamically
+  thead.innerHTML = `<tr>
+    ${cols.map(c => `<th onclick="sortBy('${c.k}')" ${c.mw?`style="min-width:${c.mw}"`:''}>${c.l}<span class="sa">↕</span></th>`).join('')}
+    <th style="width:100px">Actions</th>
+  </tr>`;
+
+  if (!pageRecs.length) {
+    tbody.innerHTML = `<tr><td colspan="${cols.length + 1}"><div class="empty"><span class="empty-ico">🔍</span><p>No records found</p><small>Try adjusting your filters or search query</small></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = pageRecs.map((r, i) => {
+    const tds = cols.map(c => {
+      const val = r[c.k];
+      
+      const isDateField = ['indent_date','sent_vetting_on','sent_concurrence_on','sent_store_on',
+        'tender_published_date','tender_opening_date','delivery_schedule','po_date', 'status_entry_date', 'last_updated_on'].includes(c.k);
+      if (isDateField) {
+        return `<td style="white-space:nowrap; color:#475569; font-size:12px;">${formatDate(val)}</td>`;
+      }
+      
+      // Formatting specific columns
+      if (c.k === 'id') return `<td class="sno-cell">${start + i + 1}</td>`;
+      if (c.k === 'description') return `<td class="desc-cell" style="white-space: pre-wrap; word-break: break-word; line-height: 1.4;">${esc(val || '—')}</td>`;
+      if (c.k === 'safety_item') {
+         if (val === 'Safety Item') return `<td><span class="safety-yes" style="background:#fef2f2;color:#ef4444;border:1px solid #fecaca;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600;">🔴 SAFETY</span></td>`;
+         if (val === 'General Item') return `<td><span style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600;">🟢 GENERAL</span></td>`;
+         if (val === 'Machine Item') return `<td><span style="background:#eff6ff;color:#3b82f6;border:1px solid #bfdbfe;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600;">⚙️ MACHINE</span></td>`;
+         return `<td><span class="safety-no">—</span></td>`;
+      }
+      if (c.k === 'priority') return `<td>${priorityBadge(val)}</td>`;
+      
+      if (c.k === 'indent_value') {
+        let cleanStr = String(val||'').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+        let num = cleanStr ? Number(cleanStr[0]) : NaN;
+        if (!isNaN(num)) {
+           return `<td><strong style="color:#0f172a;">₹ ${num.toLocaleString('en-IN', {maximumFractionDigits:2})}</strong></td>`;
+        }
+        return `<td>${esc(val || '—')}</td>`;
+      }
+      
+      if (c.k === 'current_status') {
+         const sc = STATUS_CLS[val] || 's0';
+         const si = STATUS_ORDER.indexOf(val);
+         const pct = si >= 0 ? Math.round((si / (STATUS_ORDER.length - 1)) * 100) : 0;
+         return `<td><span class="pill ${sc}">${esc(val || '—')}</span><div class="status-progress"><div class="status-progress-fill" style="width:${pct}%"></div></div></td>`;
+      }
+      
+      if (c.k === 'indent_no' || c.k === 'po_number') return `<td class="mono" style="white-space: pre-wrap; word-break: break-all;">${esc(val || '—')}</td>`;
+      if (c.k === 'purchase_unit') return `<td style="color:var(--cyan);font-weight:700;font-size:12px">${esc(val || '—')}</td>`;
+      if (['current_holder'].includes(c.k)) return `<td style="color:var(--tm);font-size:12px">${esc(val || '—')}</td>`;
+      if (c.k === 'firm_name' || c.k === 'likely_supplier') return `<td style="white-space: pre-wrap; word-break: break-word;">${esc(val || '—')}</td>`;
+      if (c.k === 'remarks') return `<td style="white-space: pre-wrap; word-break: break-word; min-width: 250px; font-size: 11.5px; color: var(--td); line-height: 1.4;">${esc(val || '—')}</td>`;
+      if (c.k === 'abnormal_reason') {
+         const abnText = val === 'Other' && r.abnormal_reason_other ? `Other: ${r.abnormal_reason_other}` : (val || '—');
+         return `<td style="color:#ef4444;font-weight:600;white-space: pre-wrap; word-break: break-word;">⚠️ ${esc(abnText)}</td>`;
+      }
+      
+      if (['qty_required', 'qty_received', 'qty_pending'].includes(c.k)) {
+        if (r.is_flattened_item) return `<td style="white-space: pre-wrap; word-break: break-word;">${esc(val || '—')}</td>`;
+        if (r.line_items && r.line_items.length > 0) {
+          const hasAny = r.line_items.some(li => li[c.k] && String(li[c.k]).trim() !== '');
+          if (hasAny) {
+             let badges = r.line_items.map(li => `<div style="display:inline-block; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:4px; padding:2px 6px; font-size:11px; margin-bottom:2px; color:#334155;">${esc(li[c.k] || '0')}</div>`);
+             if (badges.length > 4) {
+                 const remaining = badges.length - 3;
+                 badges = badges.slice(0, 3);
+                 badges.push(`<div style="display:inline-block; background:#e2e8f0; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px; font-size:10.5px; font-weight:600; margin-bottom:2px; color:#475569;">+${remaining} more</div>`);
+             }
+             return `<td style="vertical-align:top;"><div style="display:flex; flex-direction:column; align-items:flex-start; gap:2px;">${badges.join('')}</div></td>`;
+          }
+        }
+      }
+
+      // Generic text format
+      return `<td style="white-space: pre-wrap; word-break: break-word;">${esc(val || '—')}</td>`;
+    }).join('');
+
+    return `<tr onclick="openEdit('${r.id}')" style="animation-delay: ${i * 0.04}s">
+      ${tds}
+      <td onclick="event.stopPropagation()">
+        <div class="act-btns">
+          <button class="btn-edit" onclick="openEdit('${r.id}')">✏ Edit</button>
+          <button class="btn-del" onclick="confirmDelete('${r.id}')">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function priorityBadge(p) {
+  if (p == 1 || p === 'High' || p === '1') return '<span class="pb p-hi">🔴 High</span>';
+  if (p == 2 || p === 'Medium' || p === '2') return '<span class="pb p-md">● Med</span>';
+  if (p == 3 || p === 'Low' || p === '3') return '<span class="pb p-lo">🟢 Low</span>';
+  if (p != null && p !== '') return `<span class="pb" style="background:rgba(99,130,185,.1);color:var(--tm);border:1px solid var(--border)">${esc(p)}</span>`;
+  return '<span style="color:var(--td)">—</span>';
+}
+function exportExcel() {
+  const cols = getActiveCols();
+  const headers = cols.map(c => c.l);
+  
+  const displayList = isItemView ? flattenedItems : filtered;
+  const data = displayList.map((r, i) => {
+    let row = {};
+    cols.forEach(c => {
+      let val = r[c.k];
+      if (c.k === 'id') val = i + 1; // Export sequential SL No instead of ID
+      
+      // If value isn't on the parent but exists in line items (like qty_required in Indent view)
+      if ((val === undefined || val === null || val === '') && r.line_items && r.line_items.length > 0) {
+        const hasAny = r.line_items.some(li => li[c.k] !== undefined && li[c.k] !== null && String(li[c.k]).trim() !== '');
+        if (hasAny) {
+           val = r.line_items.map(li => li[c.k] || '0').join(', ');
+        }
+      }
+
+      if (val === undefined || val === null) val = '';
+      row[c.l] = val;
+    });
+    return row;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data, { header: headers });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Indents");
+  XLSX.writeFile(wb, `railway-indents-${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+// ── PAGINATION ─────────────────────────────────────────────────────────────
+function renderPagination() {
+  const displayList = isItemView ? flattenedItems : filtered;
+  const total = displayList.length;
+  const pages = Math.ceil(total / PER_PAGE);
+  const start = (page - 1) * PER_PAGE + 1;
+  const end = Math.min(page * PER_PAGE, total);
+
+  document.getElementById('pageInfo').textContent = total ? `Showing ${start}-${end} of ${total}` : 'No records';
+
+  const btns = document.getElementById('pageBtns');
+  if (pages <= 1) { btns.innerHTML = ''; return; }
+
+  let html = `<button class="page-btn" onclick="goPage(${page-1})" ${page===1?'disabled':''}>‹</button>`;
+  for (let i = 1; i <= pages; i++) {
+    if (i === 1 || i === pages || Math.abs(i - page) <= 1) {
+      html += `<button class="page-btn ${i===page?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    } else if (Math.abs(i - page) === 2) {
+      html += `<button class="page-btn" disabled>…</button>`;
+    }
+  }
+  html += `<button class="page-btn" onclick="goPage(${page+1})" ${page===pages?'disabled':''}>›</button>`;
+  btns.innerHTML = html;
+}
+
+function goPage(p) {
+  const displayList = isItemView ? flattenedItems : filtered;
+  const pages = Math.ceil(displayList.length / PER_PAGE);
+  if (p < 1 || p > pages) return;
+  page = p;
+  renderTable();
+  renderPagination();
+  document.querySelector('.content-panel').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+// ── SIDE PANEL ─────────────────────────────────────────────────────────────
+function openAdd() {
+  editId = null;
+  showAllFields = true; // Show all fields for new records
+  document.getElementById('panelMode').innerHTML = '<span class="panel-mode-dot"></span> NEW RECORD';
+  document.getElementById('panelTitle').textContent = 'Add New Indent';
+  document.getElementById('panelSub').textContent = 'Fill in the details below. Description is required to save.';
+  document.getElementById('panelFooterInfo').textContent = 'New record will be created in the database';
+  document.getElementById('saveBtnText').textContent = 'Create Record';
+  buildPanelForm(null, null);
+  openPanel();
+}
+
+async function openEdit(id) {
+  editId = id;
+  showAllFields = false; // Stage-based view for editing
+  const r = allRecords.find(x => x.id == id);
+  if (!r) return;
+  document.getElementById('panelMode').innerHTML = '<span class="panel-mode-dot" style="background:var(--green)"></span> EDITING';
+  document.getElementById('panelTitle').textContent = `Indent #${r.id}`;
+  document.getElementById('panelSub').textContent = (r.description || '').slice(0, 80);
+  document.getElementById('panelFooterInfo').textContent = `ID: ${r.id} · Created: ${r.created_at || '—'} · Last updated: ${r.last_updated_on || '—'}`;
+  document.getElementById('saveBtnText').textContent = 'Save Changes';
+  buildPanelForm(r, r.current_status);
+  openPanel();
+}
+
+function openPanel() {
+  document.getElementById('panelOverlay').classList.add('open');
+  document.getElementById('sidePanel').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePanel() {
+  document.getElementById('panelOverlay').classList.remove('open');
+  document.getElementById('sidePanel').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ── STAGE-AWARE PANEL FORM ─────────────────────────────────────────────────
+function getFieldVisibility(status) {
+  // For new records or when showAllFields is on, everything is editable
+  if (!status || showAllFields) {
+    const allKeys = FIELDS.map(f => f.key);
+    return { editable: new Set(allKeys), readonly: new Set(), visible: new Set(allKeys) };
+  }
+  
+  const stage = STAGE_FIELDS[status];
+  if (!stage) {
+    const allKeys = FIELDS.map(f => f.key);
+    return { editable: new Set(allKeys), readonly: new Set(), visible: new Set(allKeys) };
+  }
+  
+  const editable = new Set(stage.editable);
+  const readonly = new Set(stage.readonly);
+  const visible = new Set([...stage.editable, ...stage.readonly]);
+  
+  // Always ensure last_updated_on is readonly
+  if (visible.has('last_updated_on')) {
+    editable.delete('last_updated_on');
+    readonly.add('last_updated_on');
+  }
+  
+  return { editable, readonly, visible };
+}
+
+function buildPanelForm(record, status) {
+  const fieldMap = {};
+  FIELDS.forEach(f => fieldMap[f.key] = f);
+  const vis = getFieldVisibility(status);
+  
+  // Show All Fields toggle (only for editing)
+  let toggleHtml = '';
+  if (editId) {
+    toggleHtml = `<div class="show-all-toggle">
+      <label class="toggle-label">
+        <input type="checkbox" id="showAllToggle" ${showAllFields ? 'checked' : ''} onchange="toggleShowAll(this.checked)"/>
+        <span class="toggle-switch"></span>
+        <span>Show All Fields</span>
+      </label>
+      <span class="stage-badge">${esc(status || 'Unknown')}</span>
+    </div>`;
+  }
+  
+  let html = toggleHtml;
+
+  SECTIONS.forEach((sec, secIdx) => {
+    // Check if any fields in this section are visible
+    const visibleFields = sec.fields.filter(k => vis.visible.has(k));
+    if (visibleFields.length === 0) return; // Skip entire section if no visible fields
+    
+    html += `<div class="form-section">
+      <div class="section-header">
+        <div class="section-icon" style="background:${sec.color}">${sec.icon}</div>
+        <span class="section-label">${sec.title}</span>
+      </div>`;
+
+    html += `<div class="form-grid ${visibleFields.length === 1 ? 'single' : ''}">`;
+
+    visibleFields.forEach(key => {
+      const f = fieldMap[key];
+      if (!f) return;
+      const val = record ? (record[f.key] != null ? record[f.key] : '') : '';
+      const isReadonly = vis.readonly.has(key) || f.readonly;
+      html += buildFormField(f, val, isReadonly);
+    });
+
+    html += '</div></div>';
+
+    // ── Insert Line Items right after Basic Information ──────────────────
+    if (secIdx === 0) {
+      const lineItems = (record && Array.isArray(record.line_items)) ? record.line_items : [];
+      const calcTotal = lineItems.reduce((s, li) => s + Math.round(parseFloat(li.rate || 0) * parseFloat(li.qty_required || 0)), 0);
+      const itemsCountDisplay = lineItems.length > 0 ? lineItems.length : (record ? (parseInt(record.items_count)||0) : 0);
+      html += `<div class="form-section">
+        <div class="section-header">
+          <div class="section-icon" style="background:rgba(124,58,237,.12)">📋</div>
+          <span class="section-label">Line Items</span>
+          <span id="liSectionHeaderCount" style="margin-left:auto;font-size:12px;color:#64748b;">${itemsCountDisplay} item(s)</span>
+        </div>
+        <div id="lineItemsContainer">
+          <table class="line-items-table">
+            <thead>
+              <tr>
+                <th>Sl. No.</th>
+                <th>Item Description</th>
+                <th>Status</th>
+                <th>Qty Req</th>
+                <th>Rate (₹)</th>
+                <th>Amount</th>
+                <th>Qty Rcvd</th>
+                <th>Qty Pend</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="lineItemsBody" onpaste="handleTablePaste(event)">`;
+      lineItems.forEach((li, idx) => {
+        html += buildLineItemRow(li, idx);
+      });
+      html += `</tbody>
+          </table>
+          <div class="li-total-row" style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:14px; color:#475569;">Total Items:</span>
+            <input type="number" id="liTotalItems" value="${itemsCountDisplay}" oninput="this.dataset.manual='true'" style="width:70px; padding:4px; font-weight:600; text-align:center; color:#4338ca; border:1px solid #cbd5e1; border-radius:4px; margin-right:20px; outline:none;">
+            <span style="font-size:14px; color:#475569;">Total Indent Value (₹):</span>
+            <input type="number" step="0.01" id="liTotalValue" value="${calcTotal > 0 ? calcTotal.toFixed(2) : (record ? (record.indent_value || '') : '')}" oninput="this.dataset.manual='true'" style="width:140px; padding:4px; font-weight:600; text-align:center; color:#4338ca; border:1px solid #cbd5e1; border-radius:4px; outline:none;">
+          </div>
+          <button type="button" class="btn-add-line-item" onclick="addLineItem()">＋ Add Item</button>
+        </div>
+      </div>`;
+    }
+  });
+
+  document.getElementById('panelBody').innerHTML = html;
+  document.getElementById('panelBody').scrollTop = 0;
+  
+  // Listen for status change to re-render
+  const statusSel = document.querySelector('#panelBody [data-key="current_status"]');
+  if (statusSel && editId) {
+    statusSel.addEventListener('change', function() {
+      const newStatus = this.value;
+      if (newStatus && !showAllFields) {
+        const currentVals = gatherFormValues();
+        const mergedRecord = record ? { ...record, ...currentVals } : currentVals;
+        mergedRecord.current_status = newStatus;
+        if (document.getElementById('lineItemsContainer')) {
+          mergedRecord.line_items = gatherLineItems();
+        }
+        buildPanelForm(mergedRecord, newStatus);
+      }
+    });
+  }
+
+  // Handle Abnormal Reason "Other" toggle
+  const abnReasonSel = document.querySelector('#panelBody [data-key="abnormal_reason"]');
+  const abnOtherContainer = document.querySelector('#panelBody [data-key="abnormal_reason_other"]')?.closest('.fg');
+  if (abnReasonSel && abnOtherContainer) {
+    const updateOther = () => { abnOtherContainer.style.display = abnReasonSel.value === 'Other' ? 'block' : 'none'; };
+    abnReasonSel.addEventListener('change', updateOther);
+    updateOther();
+  }
+}
+
+function buildLineItemRow(li, idx) {
+  const qty = parseFloat(li.qty_required || 0);
+  const rate = parseFloat(li.rate || 0);
+  const amt = Math.round(qty * rate);
+  const statusOptions = STATUS_ORDER.map(s => `<option value="${s}" ${li.current_status === s ? 'selected' : ''}>${s}</option>`).join('');
+  let rowHtml = `<tr data-li-idx="${idx}">
+    <td style="color:#94a3b8;font-size:12px;">${idx + 1}</td>
+    <td><input type="text" class="li-input li-desc" value="${esc(li.item_desc || '')}" placeholder="Item description..."/></td>
+    <td><select class="li-input li-status" style="width:130px; font-size:12px;"><option value="">(Inherit)</option>${statusOptions}</select></td>
+    <td><input type="text" class="li-input li-qty-req" value="${esc(li.qty_required || '')}" placeholder="Qty Req" oninput="recalcIndentValue()"/></td>
+    <td><input type="number" class="li-input li-rate" value="${esc(li.rate || '')}" placeholder="Rate" oninput="recalcIndentValue()"/></td>
+    <td class="li-amt" style="font-size:12px;color:#334155;font-weight:500;white-space:nowrap;">₹ ${amt ? amt.toLocaleString('en-IN') : '0'}</td>
+    <td><input type="text" class="li-input li-qty-rcv" value="${esc(li.qty_received || '')}" placeholder="Qty Rcvd"/></td>
+    <td><input type="text" class="li-input li-qty-pend" value="${esc(li.qty_pending || '')}" placeholder="Qty Pend"/></td>
+    <td><button type="button" class="btn-remove-li" onclick="removeLineItem(${idx})" title="Remove">✕</button></td>
+  </tr>`;
+  return rowHtml;
+}
+
+function handleTablePaste(e) {
+  const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+  if (!pasteData) return;
+  
+  if (!pasteData.includes('\t') && !pasteData.includes('\n')) return;
+
+  const rows = pasteData.trim().split('\n').map(row => row.split('\t'));
+  if (rows.length === 1 && rows[0].length === 1) return;
+
+  e.preventDefault();
+
+  const target = e.target;
+  let startRowIdx = 0;
+  let startColIdx = 0;
+  
+  if (target.classList.contains('li-input')) {
+    const tr = target.closest('tr');
+    startRowIdx = parseInt(tr.dataset.liIdx) || 0;
+    const inputs = Array.from(tr.querySelectorAll('.li-input'));
+    startColIdx = inputs.indexOf(target);
+  }
+
+  const tbody = document.getElementById('lineItemsBody');
+  
+  rows.forEach((rowCells, rIdx) => {
+    let tr = tbody.querySelector(`tr[data-li-idx="${startRowIdx + rIdx}"]`);
+    if (!tr) {
+      addLineItem();
+      tr = tbody.querySelector(`tr[data-li-idx="${startRowIdx + rIdx}"]`);
+    }
+    if (!tr) return;
+    
+    const inputs = Array.from(tr.querySelectorAll('.li-input'));
+    rowCells.forEach((cellVal, cIdx) => {
+      const input = inputs[startColIdx + cIdx];
+      if (input) {
+        input.value = cellVal.trim();
+      }
+    });
+  });
+  
+  recalcIndentValue();
+}
+
+function addLineItem() {
+  const tbody = document.getElementById('lineItemsBody');
+  const idx = tbody.querySelectorAll('tr').length;
+  const newRow = buildLineItemRow({ item_desc:'', current_status:'', qty_required:'', qty_received:'', qty_pending:'', rate:'' }, idx);
+  tbody.insertAdjacentHTML('beforeend', newRow);
+  recalcIndentValue();
+}
+
+function removeLineItem(idx) {
+  const rows = document.querySelectorAll('#lineItemsBody tr');
+  if (rows[idx]) rows[idx].remove();
+  // Re-index remaining rows
+  document.querySelectorAll('#lineItemsBody tr').forEach((row, i) => {
+    row.dataset.liIdx = i;
+    row.querySelector('td:first-child').textContent = i + 1;
+    row.querySelector('.btn-remove-li').setAttribute('onclick', `removeLineItem(${i})`);
+  });
+  recalcIndentValue();
+}
+
+function gatherLineItems() {
+  const items = [];
+  document.querySelectorAll('#lineItemsBody tr').forEach(row => {
+    const desc = row.querySelector('.li-desc');
+    if (!desc) return;
+    items.push({
+      item_desc: desc.value || '',
+      current_status: row.querySelector('.li-status')?.value || '',
+      qty_required: row.querySelector('.li-qty-req')?.value || '',
+      rate: row.querySelector('.li-rate')?.value || '',
+      qty_received: row.querySelector('.li-qty-rcv')?.value || '',
+      qty_pending: row.querySelector('.li-qty-pend')?.value || ''
+    });
+  });
+  return items;
+}
+
+function recalcIndentValue() {
+  let total = 0;
+  const rows = document.querySelectorAll('#lineItemsBody tr');
+  rows.forEach(row => {
+    const qty = parseFloat(row.querySelector('.li-qty-req')?.value || 0);
+    const rate = parseFloat(row.querySelector('.li-rate')?.value || 0);
+    const amt = Math.round(qty * rate);
+    const amtCell = row.querySelector('.li-amt');
+    if (amtCell) amtCell.textContent = '₹ ' + (amt ? amt.toLocaleString('en-IN') : '0');
+    total += amt;
+  });
+  // Update total display if not manually overridden
+  const totalEl = document.getElementById('liTotalValue');
+  if (totalEl && totalEl.dataset.manual !== 'true') totalEl.value = total ? total.toFixed(2) : '';
+
+  // Update total items dynamically if not manually overridden
+  const totalItemsEl = document.getElementById('liTotalItems');
+  const itemsCountDisplay = rows.length > 0 ? rows.length : (editId ? (parseInt(allRecords.find(r=>r.id===editId)?.items_count)||0) : 0);
+  if (totalItemsEl && totalItemsEl.dataset.manual !== 'true') totalItemsEl.value = itemsCountDisplay;
+
+  const countSpan = document.getElementById('liSectionHeaderCount');
+  if (countSpan) countSpan.textContent = (totalItemsEl ? totalItemsEl.value : itemsCountDisplay) + ' item(s)';
+}
+
+function gatherFormValues() {
+  const vals = {};
+  document.querySelectorAll('#panelBody [data-key]').forEach(el => {
+    vals[el.getAttribute('data-key')] = el.value || null;
+  });
+  return vals;
+}
+
+function toggleShowAll(checked) {
+  showAllFields = checked;
+  if (editId) {
+    const r = allRecords.find(x => x.id == editId);
+    if (r) {
+      const currentVals = gatherFormValues();
+      const mergedRecord = { ...r, ...currentVals };
+      if (document.getElementById('lineItemsContainer')) {
+        mergedRecord.line_items = gatherLineItems();
+      }
+      buildPanelForm(mergedRecord, mergedRecord.current_status);
+    }
+  }
+}
+
+function buildFormField(f, value, forceReadonly) {
+  const id = 'pf_' + f.key;
+  const span2Class = f.span2 ? ' span2' : '';
+  const isRo = forceReadonly || f.readonly;
+  const ro = isRo ? ' readonly disabled' : '';
+  const roClass = isRo ? ' field-readonly' : '';
+  const req = f.required ? '<span class="req">*</span>' : '';
+
+  let input = '';
+  if (f.type === 'select') {
+    const hasValueInOpts = f.options.some(o => String(o) === String(value));
+    let optsHtml = '';
+    if (value && !hasValueInOpts) {
+      optsHtml += `<option value="${esc(value)}" selected>${esc(value)}</option>`;
+    }
+    optsHtml += f.options.map(o => `<option value="${esc(o)}" ${String(o) === String(value) ? 'selected' : ''}>${esc(o)}</option>`).join('');
+    input = `<select id="${id}" data-key="${f.key}" ${isRo ? 'disabled' : ''}><option value="">— Select —</option>${optsHtml}</select>`;
+  } else if (f.type === 'textarea') {
+    input = `<textarea id="${id}" data-key="${f.key}" placeholder="${f.label}..." ${isRo ? 'readonly' : ''}>${esc(value)}</textarea>`;
+  } else if (f.type === 'date') {
+    const dateVal = value ? String(value).slice(0, 10) : '';
+    input = `<input type="date" id="${id}" data-key="${f.key}" value="${dateVal}" ${isRo ? 'readonly' : ''}/>`;
+  } else if (f.type === 'number') {
+    input = `<input type="number" id="${id}" data-key="${f.key}" value="${esc(value)}" placeholder="0" ${isRo ? 'readonly' : ''}/>`;
+  } else {
+    input = `<input type="text" id="${id}" data-key="${f.key}" value="${esc(value)}" placeholder="${f.label}..." ${isRo ? 'readonly' : ''}/>`;
+  }
+
+  return `<div class="fg${span2Class}${roClass}"><label>${esc(f.label)}${req}</label>${input}</div>`;
+}
+
+// ── SAVE ───────────────────────────────────────────────────────────────────
+async function saveRecord() {
+  const btn = document.getElementById('saveBtn');
+  const desc = document.querySelector('#panelBody [data-key="description"]');
+  if (desc && !desc.value.trim()) {
+    toast('Description of Items is required', 'error');
+    desc.focus();
+    return;
+  }
+
+  // Gather all field values (including readonly fields for edit to preserve data)
+  const payload = {};
+  document.querySelectorAll('#panelBody [data-key]').forEach(el => {
+    const key = el.getAttribute('data-key');
+    if (el.tagName === 'SELECT' && el.disabled) {
+      payload[key] = el.value || null;
+    } else if (!el.readOnly || key === 'last_updated_on') {
+      payload[key] = el.value || null;
+    } else {
+      payload[key] = el.value || null;
+    }
+  });
+
+  const safetyEl = document.getElementById('f_safety_item');
+  if (safetyEl && !safetyEl.value) {
+    payload.safety_item = 'Machine Item';
+  }
+
+  // Gather line items
+  if (document.getElementById('lineItemsContainer')) {
+    payload.line_items = gatherLineItems();
+  } else {
+    const existing = editId ? allRecords.find(r => r.id == editId) : null;
+    payload.line_items = existing ? (existing.line_items || []) : [];
+  }
+  // Set items_count and indent_value from manual inputs if they exist
+  const liTotalItemsInput = document.getElementById('liTotalItems');
+  const liTotalValueInput = document.getElementById('liTotalValue');
+
+  if (liTotalItemsInput && liTotalItemsInput.value) {
+    payload.items_count = parseInt(liTotalItemsInput.value, 10);
+  } else if (!payload.items_count && payload.line_items.length > 0) {
+    payload.items_count = payload.line_items.length;
+  }
+
+  if (liTotalValueInput && liTotalValueInput.value) {
+    payload.indent_value = parseFloat(liTotalValueInput.value).toFixed(2);
+  } else if (!payload.indent_value && payload.line_items.length > 0) {
+    const computedIndentValue = payload.line_items.reduce((s, li) => s + Math.round(parseFloat(li.rate || 0) * parseFloat(li.qty_required || 0)), 0);
+    payload.indent_value = computedIndentValue > 0 ? computedIndentValue.toFixed(2) : null;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div><span>Saving...</span>';
+
+  try {
+    if (!payload.id) payload.id = 'IND' + Date.now();
+    payload.items_count = payload.line_items ? payload.line_items.length : 1;
+    
+    if (editId) {
+      const idx = allRecords.findIndex(r => r.id == editId);
+      if (idx !== -1) {
+        allRecords[idx] = { ...allRecords[idx], ...payload };
+      }
+    } else {
+      allRecords.push(payload);
+    }
+    
+    await syncToGoogleSheets();
+    
+    renderStats(calcStats(allRecords));
+    applyFilters();
+    closePanel();
+    toast(editId ? '✅ Record updated successfully!' : '✅ New indent created!', 'success');
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<span id="saveBtnIcon">💾</span><span id="saveBtnText">' + (editId ? 'Save Changes' : 'Create Record') + '</span>';
+}
+
+// ── DELETE ─────────────────────────────────────────────────────────────────
+function openDelete(id) {
+  deleteId = id;
+  const r = allRecords.find(x => x.id == id);
+  document.getElementById('delName').textContent = r ? `#${r.id} — ${(r.description || '').slice(0, 100)}` : `ID: ${id}`;
+  document.getElementById('delOverlay').classList.add('open');
+}
+
+function closeDelete() {
+  document.getElementById('delOverlay').classList.remove('open');
+  deleteId = null;
+}
+
+async function confirmDelete() {
+  if (!deleteId) return;
+  try {
+    allRecords = allRecords.filter(r => r.id != deleteId);
+    await syncToGoogleSheets();
+    
+    renderStats(calcStats(allRecords));
+    applyFilters();
+    closeDelete();
+    toast('🗑 Record deleted', 'info');
+  } catch(e) {
+    toast('Delete failed: ' + e.message, 'error');
+    closeDelete();
+  }
+}
+
+// ── EXPORT & IMPORT CSV (Master File Format) ───────────────────────────────
+
+const MASTER_COLUMNS = [
+  { label: 'Serial Number', key: 'id' },
+  { label: 'Description of Items', key: 'description' },
+  { label: 'No.of items in Indent', key: 'items_count' },
+  { label: 'Item Category', key: 'safety_item' },
+  { label: 'Priority', key: 'priority' },
+  { label: 'Quantity Required', key: 'qty_required' },
+  { label: 'Purchase Unit', key: 'purchase_unit' },
+  { label: 'Indent Value', key: 'indent_value' },
+  { label: 'Indent Approving Authority', key: 'approving_authority' },
+  { label: 'Approval through E-Office Required (Yes/No)', key: 'eoffice_required' },
+  { label: 'Vetting Required (Yes/No)', key: 'vetting_required' },
+  { label: 'Concurrence Required (Yes/No)', key: 'concurrence_required' },
+  { label: 'Indent Approved (Yes/No)', key: 'indent_approved' },
+  { label: 'Indent No', key: 'indent_no' },
+  { label: 'Indent Date', key: 'indent_date' },
+  { label: 'Sent for Vetting On', key: 'sent_vetting_on' },
+  { label: 'Sent for Concurrence On', key: 'sent_concurrence_on' },
+  { label: 'Sent to Store On', key: 'sent_store_on' },
+  { label: 'Likely Supplier', key: 'likely_supplier' },
+  { label: 'Tender No', key: 'tender_no' },
+  { label: 'Tender Published Date', key: 'tender_published_date' },
+  { label: 'Tender Opening Date', key: 'tender_opening_date' },
+  { label: 'PO Number', key: 'po_number' },
+  { label: 'Firm Name', key: 'firm_name' },
+  { label: 'Firm Contact Details', key: 'firm_contact' },
+  { label: 'Delivery Schedule', key: 'delivery_schedule' },
+  { label: 'Quantity Received', key: 'qty_received' },
+  { label: 'Quantity Pending', key: 'qty_pending' },
+  { label: 'Current Status', key: 'current_status' },
+  { label: 'Current Holder', key: 'current_holder' },
+  { label: 'Date of entry in current status', key: 'status_entry_date' },
+  { label: 'No.of days elapsed in Current status', key: 'days_in_status' },
+  { label: 'Last Updated By', key: 'last_updated_by' },
+  { label: 'Last Updated On', key: 'last_updated_on' },
+  { label: 'Remarks/Action To be Taken', key: 'remarks' }
+];
+
+function exportCSV() {
+  const headers = MASTER_COLUMNS.map(c => c.label);
+  const rows = [headers.join(',')];
+  allRecords.forEach(r => {
+    rows.push(MASTER_COLUMNS.map(c => {
+      let v = r[c.key];
+      if (v == null) v = '';
+      return `"${String(v).replace(/"/g, '""')}"`;
+    }).join(','));
+  });
+  const blob = new Blob([rows.join('\n')], { type:'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Railway_Indent_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  toast('📥 CSV exported (' + allRecords.length + ' records)', 'success');
+}
+
+let pendingImportRecords = null;
+
+function importCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const dataUrl = e.target.result;
+    try {
+      toast('Analyzing file...', 'success');
+      const res = await fetch('/api/preview-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: dataUrl })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Preview failed');
+      
+      pendingImportRecords = data.validRecords;
+      document.getElementById('previewModalBody').innerHTML = 
+        `We found <strong>${data.updateCount}</strong> existing records to update.<br/>` +
+        `We found <strong>${data.newCount}</strong> new records to add.<br/><br/>` +
+        `Proceed with import?`;
+      document.getElementById('previewOverlay').classList.add('open');
+    } catch(err) {
+      toast('Import error: ' + err.message, 'error');
+    }
+  };
+  reader.readAsDataURL(file);
+  event.target.value = ''; // reset input
+}
+
+function closePreviewModal() {
+  document.getElementById('previewOverlay').classList.remove('open');
+  pendingImportRecords = null;
+}
+
+async function confirmImport() {
+  if (!pendingImportRecords) return;
+  try {
+    toast('Importing records...', 'success');
+    closePreviewModal();
+    const res = await fetch('/api/import-records', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ records: pendingImportRecords })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Import failed');
+    toast(`✅ ${data.message}`, 'success');
+    refreshData();
+  } catch(err) {
+    toast('Import error: ' + err.message, 'error');
+  }
+}
+
+// ── TOAST ──────────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = msg;
+  container.appendChild(t);
+  requestAnimationFrame(() => { requestAnimationFrame(() => t.classList.add('show')); });
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 400);
+  }, 3500);
+}
+
+// ── UTILS ──────────────────────────────────────────────────────────────────
+function esc(v) {
+  if (v == null) return '';
+  return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Close panel on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('delOverlay').classList.contains('open')) closeDelete();
+    else if (document.getElementById('sidePanel').classList.contains('open')) closePanel();
+  }
+});
+
+function calcStoreReport(records) {
+  const initBucket = () => {
+    let b = { total: 0 };
+    STATUS_ORDER.forEach(s => b[s] = 0);
+    return b;
+  };
+  
+  const report = {
+    UBL: { indents: initBucket(), items: initBucket() },
+    SBC: { indents: initBucket(), items: initBucket() },
+    Unassigned: { indents: initBucket(), items: initBucket() },
+    Total: { indents: initBucket(), items: initBucket() }
+  };
+  
+  records.forEach(r => {
+    let unit = r.purchase_unit;
+    if (unit !== 'UBL' && unit !== 'SBC') unit = 'Unassigned';
+    
+    let itemCount = r.line_items && r.line_items.length > 0 ? r.line_items.length : (parseInt(r.items_count, 10) || 0);
+    
+    report[unit].indents.total += 1;
+    report[unit].items.total += itemCount;
+    report.Total.indents.total += 1;
+    report.Total.items.total += itemCount;
+    
+    const st = r.current_status || '';
+    if (STATUS_ORDER.includes(st)) {
+      report[unit].indents[st] += 1;
+      report.Total.indents[st] += 1;
+    }
+
+    if (r.line_items && r.line_items.length > 0) {
+      r.line_items.forEach(li => {
+         const liSt = li.current_status || r.current_status || '';
+         if (STATUS_ORDER.includes(liSt)) {
+            report[unit].items[liSt] += 1;
+            report.Total.items[liSt] += 1;
+         }
+      });
+    } else {
+      if (STATUS_ORDER.includes(st)) {
+        report[unit].items[st] += itemCount;
+        report.Total.items[st] += itemCount;
+      }
+    }
+  });
+  return report;
+}
+
+function openReportModal() {
+  document.getElementById('reportOverlay').classList.add('open');
+  try {
+    const data = calcStoreReport(allRecords);
+    renderReportModal(data);
+  } catch(e) {
+    document.getElementById('reportContent').innerHTML = '<div style="color:red; padding: 20px;"><b>Error Loading Report:</b><br/>' + e.message + '</div>';
+  }
+}
+
+function closeReportModal() {
+  document.getElementById('reportOverlay').classList.remove('open');
+}
+
+function printReportModal() {
+  const content = document.getElementById('reportContent').innerHTML;
+  const printWin = window.open('', '_blank');
+  printWin.document.write(`
+    <html>
+      <head>
+        <title>Detailed Store Report</title>
+        <style>
+          body { font-family: 'Inter', sans-serif; padding: 20px; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 11px; }
+          th, td { border: 1px solid #cbd5e1; padding: 6px; text-align: center; }
+          th { background: #f8fafc; font-weight: 600; color: #334155; }
+          .title { font-size: 14px; font-weight: 600; margin-bottom: 8px; text-align: center; background: #e2e8f0; padding: 4px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <h2 style="text-align:center; margin-bottom: 24px;">Detailed Store Report</h2>
+        ${content}
+        <script>window.print(); setTimeout(()=>window.close(), 500);<\/script>
+      </body>
+    </html>
+  `);
+  printWin.document.close();
+}
+
+function exportDetailedReportExcel() {
+  if (!window.lastReportData) return alert('Report data not loaded yet.');
+  const d = window.lastReportData;
+
+  const buildSheetData = (type) => {
+    const headerRow = ["Store", "Total", ...STATUS_ORDER, "Others/Unknown"];
+    
+    const buildRow = (label, dataObj) => {
+      let row = [label, dataObj.total];
+      let knownSum = 0;
+      STATUS_ORDER.forEach(s => {
+         const val = dataObj[s] || 0;
+         row.push(val);
+         knownSum += val;
+      });
+      row.push(dataObj.total - knownSum);
+      return row;
+    };
+
+    return [
+      headerRow,
+      buildRow("UBL", d.UBL[type]),
+      buildRow("SBC", d.SBC[type]),
+      buildRow("Other / Unassigned", d.Unassigned[type]),
+      buildRow("TOTAL", d.Total[type])
+    ];
+  };
+
+  const wsIndents = XLSX.utils.aoa_to_sheet(buildSheetData('indents'));
+  const wsItems = XLSX.utils.aoa_to_sheet(buildSheetData('items'));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsIndents, "Indents Tracking");
+  XLSX.utils.book_append_sheet(wb, wsItems, "Items Tracking");
+
+  XLSX.writeFile(wb, `detailed-store-report-${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+function renderReportModal(d) {
+  window.lastReportData = d;
+  const tableStyle = 'width: 100%; border-collapse: collapse; margin-bottom: 16px; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border-radius: 6px; overflow: hidden;';
+  const thStyle = 'background: #f1f5f9; padding: 6px; text-align: center; border: 1px solid #e2e8f0; font-weight: 600; font-size: 11px; color: #334155; line-height: 1.2;';
+  const tdStyle = 'padding: 6px; text-align: center; border: 1px solid #e2e8f0; font-size: 12px; color: #1e293b;';
+  const titleStyle = 'font-size: 13px; font-weight: 600; color: #0f172a; margin-bottom: 6px; text-align: center; background: #e2e8f0; padding: 4px; border-radius: 4px;';
+
+  const buildRow = (label, dataObj, isTotal = false) => {
+    const tp = dataObj['Tender to Be Published'] || 0;
+    const tf = dataObj['Tender Under Finalisation'] || 0;
+    const uv = dataObj['Under Vetting'] || 0;
+    const po = dataObj['PO Issued Pending Receipt'] || 0;
+    const mr = dataObj['Material Received'] || 0;
+    const others = dataObj.total - (tp + tf + uv + po + mr);
+    const bg = isTotal ? 'background: #f1f5f9; font-weight: 700;' : '';
+    const nameBg = isTotal ? 'background: #e2e8f0; font-weight: 800;' : 'font-weight: 600;';
+    return `
+    <tr>
+      <td style="${tdStyle} ${nameBg}">${label}</td>
+      <td style="${tdStyle} font-weight: 600; ${bg}">${dataObj.total}</td>
+      <td style="${tdStyle} ${bg}">${tp}</td>
+      <td style="${tdStyle} ${bg}">${tf}</td>
+      <td style="${tdStyle} ${bg}">${uv}</td>
+      <td style="${tdStyle} ${bg}">${po}</td>
+      <td style="${tdStyle} ${bg}">${mr}</td>
+      <td style="${tdStyle} color:#64748b; font-weight: 500; ${isTotal ? bg : 'background: #f8fafc;'}">${others}</td>
+    </tr>
+    `;
+  };
+
+  let html = `
+    <div style="${titleStyle}">Total Summary (Indents)</div>
+    <table style="${tableStyle}; max-width: 600px; margin-left: auto; margin-right: auto; margin-bottom: 24px;">
+      <thead>
+        <tr>
+          <th style="${thStyle}">Total Indents</th>
+          <th style="${thStyle}">UBL Store</th>
+          <th style="${thStyle}">SBC Store</th>
+          <th style="${thStyle} background: #e2e8f0;">Other / Unassigned</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="${tdStyle} font-weight: 600;">${d.Total.indents.total}</td>
+          <td style="${tdStyle}">${d.UBL.indents.total}</td>
+          <td style="${tdStyle}">${d.SBC.indents.total}</td>
+          <td style="${tdStyle} background: #f8fafc; font-weight: 600;">${d.Unassigned.indents.total}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="${titleStyle}">Total Summary (Items)</div>
+    <table style="${tableStyle}; max-width: 600px; margin-left: auto; margin-right: auto; margin-bottom: 24px;">
+      <thead>
+        <tr>
+          <th style="${thStyle}">Total Items</th>
+          <th style="${thStyle}">UBL Store</th>
+          <th style="${thStyle}">SBC Store</th>
+          <th style="${thStyle} background: #e2e8f0;">Other / Unassigned</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="${tdStyle} font-weight: 600;">${d.Total.items.total}</td>
+          <td style="${tdStyle}">${d.UBL.items.total}</td>
+          <td style="${tdStyle}">${d.SBC.items.total}</td>
+          <td style="${tdStyle} background: #f8fafc; font-weight: 600;">${d.Unassigned.items.total}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="${titleStyle}">Store Tracking Report (Indents)</div>
+    <table style="${tableStyle}">
+      <thead>
+        <tr>
+          <th style="${thStyle}">Store</th>
+          <th style="${thStyle}">Total</th>
+          <th style="${thStyle}">Tender to be Pub.</th>
+          <th style="${thStyle}">Tender Finalisation</th>
+          <th style="${thStyle}">Vetting</th>
+          <th style="${thStyle}">PO Released</th>
+          <th style="${thStyle}">PO Received</th>
+          <th style="${thStyle} background: #e2e8f0;">Other</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${buildRow('UBL', d.UBL.indents)}
+        ${buildRow('SBC', d.SBC.indents)}
+        ${buildRow('Other / Unassigned', d.Unassigned.indents)}
+        ${buildRow('TOTAL', d.Total.indents, true)}
+      </tbody>
+    </table>
+
+    <div style="${titleStyle}">Store Tracking Report (Items)</div>
+    <table style="${tableStyle}">
+      <thead>
+        <tr>
+          <th style="${thStyle}">Store</th>
+          <th style="${thStyle}">Total</th>
+          <th style="${thStyle}">Tender to be Pub.</th>
+          <th style="${thStyle}">Tender Finalisation</th>
+          <th style="${thStyle}">Vetting</th>
+          <th style="${thStyle}">PO Released</th>
+          <th style="${thStyle}">PO Received</th>
+          <th style="${thStyle} background: #e2e8f0;">Other</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${buildRow('UBL', d.UBL.items)}
+        ${buildRow('SBC', d.SBC.items)}
+        ${buildRow('Other / Unassigned', d.Unassigned.items)}
+        ${buildRow('TOTAL', d.Total.items, true)}
+      </tbody>
+    </table>
+  `;
+  document.getElementById('reportContent').innerHTML = html;
+}
+// ── START ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', init);
+</script>
+<!-- ── REPORT MODAL ─────────────────────────────────────────────────────── -->
+<div class="panel-overlay" id="reportOverlay" style="display:flex; align-items:center; justify-content:center; z-index:2000;">
+  <div style="background: white; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); max-width: 1300px; width: 98%; height: 90vh; display: flex; flex-direction: column;">
+    <div class="modal-header" style="padding: 16px 20px; display: flex; align-items: center; border-bottom: 1px solid #f1f5f9; justify-content: space-between;">
+      <div class="modal-title" style="font-weight: 600; font-size: 18px; color: #0f172a;">📊 Detailed Store Report</div>
+      <div style="display:flex; align-items:center; gap: 12px;">
+        <button class="btn-action" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer;" onclick="exportDetailedReportExcel()">📗 Export Excel</button>
+        <button class="btn-action" style="padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer;" onclick="printReportModal()">🖨 Print</button>
+        <button class="close-btn" style="background:transparent; border:none; font-size:18px; cursor:pointer;" onclick="closeReportModal()">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" style="flex: 1; overflow-y: auto; background: #f8fafc; padding: 24px;">
+      <div id="reportContent">Loading report data...</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+
