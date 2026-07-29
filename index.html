@@ -1696,12 +1696,20 @@ async function saveRecord() {
       allRecords.push(payload);
     }
     
-    await syncToGoogleSheets();
+    // Save to local cache instantly
+    localStorage.setItem('swr_cached_records', JSON.stringify(allRecords));
     
+    // Update UI instantly
     renderStats(calcStats(allRecords));
     applyFilters();
     closePanel();
     toast(editId ? '✅ Record updated successfully!' : '✅ New indent created!', 'success');
+    
+    // Sync to Google Sheets in background
+    showSyncSpinner(true);
+    syncToGoogleSheets().finally(() => {
+      showSyncSpinner(false);
+    });
   } catch(e) {
     toast('Error: ' + e.message, 'error');
   }
@@ -1727,12 +1735,21 @@ async function confirmDelete() {
   if (!deleteId) return;
   try {
     allRecords = allRecords.filter(r => r.id != deleteId);
-    await syncToGoogleSheets();
     
+    // Save to local cache instantly
+    localStorage.setItem('swr_cached_records', JSON.stringify(allRecords));
+    
+    // Update UI instantly
     renderStats(calcStats(allRecords));
     applyFilters();
     closeDelete();
     toast('🗑 Record deleted', 'info');
+    
+    // Sync to Google Sheets in background
+    showSyncSpinner(true);
+    syncToGoogleSheets().finally(() => {
+      showSyncSpinner(false);
+    });
   } catch(e) {
     toast('Delete failed: ' + e.message, 'error');
     closeDelete();
