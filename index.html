@@ -371,7 +371,7 @@ async function syncToGoogleSheets() {
   try {
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      body: JSON.stringify({ action: 'save_all', data: allRecords }),
+      body: JSON.stringify({ action: 'save_all', data: allRecords, cols_config: globalColsConfig }),
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }
     });
     const result = await res.json();
@@ -461,6 +461,9 @@ async function init() {
   try {
     const gasRes = await fetch(APPS_SCRIPT_URL).then(r => r.json());
     const freshRecords = gasRes.records || [];
+    if (gasRes.cols_config) {
+      globalColsConfig = gasRes.cols_config;
+    }
     const freshStr = JSON.stringify(freshRecords);
     const cachedStr = JSON.stringify(allRecords);
     
@@ -743,6 +746,7 @@ const COL_VIEWS = {
     { k:'safety_item', l:'Item Category' },
     { k:'current_status', l:'Status', mw:'170px' },
     { k:'current_holder', l:'Holder' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks', mw:'200px' }
   ],
   balance_indents: [
@@ -751,6 +755,7 @@ const COL_VIEWS = {
     { k:'items_count', l:'No. of Items' },
     { k:'qty_required', l:'Qty Required', mw:'140px' },
     { k:'safety_item', l:'Item Category' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks', mw:'200px' }
   ],
   proposal_started: [
@@ -760,6 +765,7 @@ const COL_VIEWS = {
     { k:'qty_required', l:'Qty Required', mw:'140px' },
     { k:'safety_item', l:'Item Category' },
     { k:'indent_value', l:'Indent Val' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks', mw:'150px' }
   ],
   proposal_drafted: [
@@ -773,7 +779,9 @@ const COL_VIEWS = {
     { k:'vetting_required', l:'Vetting Required' },
     { k:'concurrence_required', l:'Concurrence Required' },
     { k:'indent_signing_authority', l:'Signing Auth' },
+    { k:'pac_approving_authority', l:'PAC Signing Authority' },
     { k:'eoffice_required', l:'E-Office Required' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks' }
   ],
   proposal_approved: [
@@ -787,6 +795,7 @@ const COL_VIEWS = {
     { k:'vetting_required', l:'Vetting Required' },
     { k:'concurrence_required', l:'Concurrence Required' },
     { k:'indent_signing_authority', l:'Signing Auth' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks' }
   ],
   indent_signing: [
@@ -799,6 +808,7 @@ const COL_VIEWS = {
     { k:'indent_no', l:'Indent No' },
     { k:'indent_date', l:'Indent Date' },
     { k:'current_holder', l:'Holder' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks', mw:'200px' }
   ],
   vetting: [
@@ -808,6 +818,7 @@ const COL_VIEWS = {
     { k:'indent_no', l:'Indent No' },
     { k:'indent_date', l:'Indent Date' },
     { k:'sent_vetting_on', l:'Sent to Vetting On' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks' }
   ],
   concurrence: [
@@ -817,6 +828,7 @@ const COL_VIEWS = {
     { k:'indent_no', l:'Indent No' },
     { k:'indent_date', l:'Indent Date' },
     { k:'sent_concurrence_on', l:'Sent to Concurrence On' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks' }
   ],
   pac_signing: [
@@ -827,16 +839,19 @@ const COL_VIEWS = {
     { k:'indent_date', l:'Indent Date' },
     { k:'pac_required', l:'PAC Req' },
     { k:'pac_approving_authority', l:'PAC Auth' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks' }
   ],
   tender_to_be_published: [
     { k:'id', l:'Sl. No.' },
     { k:'description', l:'Description', mw:'220px' },
+    { k:'safety_item', l:'Item Category' },
     { k:'indent_no', l:'Indent No' },
     { k:'qty_required', l:'Qty Required', mw:'140px' },
     { k:'sent_store_on', l:'Sent Store' },
     { k:'purchase_unit', l:'Purchase Unit' },
     { k:'current_holder', l:'Holder' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks', mw:'200px' }
   ],
   tender_under_finalisation: [
@@ -848,6 +863,7 @@ const COL_VIEWS = {
     { k:'tender_opening_date', l:'Tender Opening' },
     { k:'likely_supplier', l:'Supplier' },
     { k:'current_holder', l:'Holder' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks', mw:'200px' }
   ],
   po: [
@@ -862,6 +878,7 @@ const COL_VIEWS = {
     { k:'qty_received', l:'Qty Rcvd' },
     { k:'qty_pending', l:'Qty Pend' },
     { k:'current_holder', l:'Holder' },
+    { k:'days_in_status', l:'Duration in Status' },
     { k:'remarks', l:'Remarks', mw:'150px' }
   ],
   material_received: [
@@ -959,7 +976,7 @@ function openColChooser() {
       } else {
         currentChooserOrder = currentChooserOrder.filter(k => k !== this.value);
       }
-      previewColumns();
+      previewColumns(); // Live preview
     });
   });
 
@@ -1035,7 +1052,7 @@ async function saveGlobalCols() {
 
   try {
     // Note: In this GAS version, we'd need a way to persist these
-    toast('Global defaults saved (locally in session)', 'success');
+    toast('Global defaults saved (locally in session). You must click "Save Record" or do a Google Sheet sync to push settings.', 'success');
     closeColChooser();
   } catch (e) {
     toast('Error saving columns: ' + e.message, 'error');
@@ -1093,7 +1110,44 @@ function formatDate(val) {
   if (!val) return '—';
   const d = new Date(val);
   if (isNaN(d.getTime())) return esc(val);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
+}
+
+function calculateDaysInStatus(r) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  
+  let targetDate = null;
+  
+  if (r.current_status === 'Tender to Be Published' && r.sent_store_on) {
+    targetDate = new Date(r.sent_store_on);
+  } else if (r.current_status === 'Tender Under Finalisation' && r.tender_opening_date) {
+    targetDate = new Date(r.tender_opening_date);
+  } else if (r.current_status === 'PO Issued Pending Receipt' && r.po_date) {
+    targetDate = new Date(r.po_date);
+  } else if (r.current_status === 'Under Vetting' && r.sent_vetting_on) {
+    targetDate = new Date(r.sent_vetting_on);
+  } else if (r.current_status === 'Under Concurrence' && r.sent_concurrence_on) {
+    targetDate = new Date(r.sent_concurrence_on);
+  } else if (r.status_entry_date) {
+    targetDate = new Date(r.status_entry_date);
+  }
+  
+  if (!targetDate || isNaN(targetDate.getTime())) return { days: null, delayLevel: 0 };
+  
+  targetDate.setHours(0,0,0,0);
+  const diffTime = Math.abs(today - targetDate);
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  let delayLevel = 0; // 0 = normal, 1 = warning/delayed
+  
+  if (['Tender to Be Published', 'Tender Under Finalisation'].includes(r.current_status) && diffDays > 7) {
+    delayLevel = 1;
+  } else if (['Under Vetting', 'Under Concurrence'].includes(r.current_status) && diffDays > 3) {
+    delayLevel = 1;
+  }
+  
+  return { days: diffDays, delayLevel: delayLevel };
 }
 
 function renderTable() {
@@ -1116,8 +1170,18 @@ function renderTable() {
   }
 
   tbody.innerHTML = pageRecs.map((r, i) => {
+    const { days, delayLevel } = calculateDaysInStatus(r);
+    const rowClass = delayLevel === 1 ? 'style="background-color: #fef2f2;"' : ''; // Light red highlight for delay
+    
     const tds = cols.map(c => {
       const val = r[c.k];
+      
+      if (c.k === 'days_in_status') {
+         if (days !== null) {
+            return `<td style="font-weight:600; color:${delayLevel === 1 ? '#ef4444' : '#475569'};">${days} days</td>`;
+         }
+         return `<td>—</td>`;
+      }
       
       const isDateField = ['indent_date','sent_vetting_on','sent_concurrence_on','sent_store_on',
         'tender_published_date','tender_opening_date','delivery_schedule','po_date', 'status_entry_date', 'last_updated_on'].includes(c.k);
@@ -1182,7 +1246,7 @@ function renderTable() {
       return `<td style="white-space: pre-wrap; word-break: break-word;">${esc(val || '—')}</td>`;
     }).join('');
 
-    return `<tr onclick="openEdit('${r.id}')" style="animation-delay: ${i * 0.04}s">
+    return `<tr ${rowClass} onclick="openEdit('${r.id}')" style="animation-delay: ${i * 0.04}s">
       ${tds}
       <td onclick="event.stopPropagation()">
         <div class="act-btns">
@@ -2163,4 +2227,3 @@ window.addEventListener('DOMContentLoaded', init);
 </div>
 </body>
 </html>
-
