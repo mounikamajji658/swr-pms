@@ -1169,8 +1169,10 @@ function renderTable() {
       const val = r[c.k];
       
       if (c.k === 'days_in_status') {
-         if (days !== null) {
+         if (days !== null && !isNaN(days)) {
             return `<td style="font-weight:600; color:${delayLevel === 1 ? '#ef4444' : '#475569'};">${days} days</td>`;
+         } else if (val !== undefined && val !== null && val !== '') {
+            return `<td style="font-weight:600; color:#475569;">${val} days</td>`;
          }
          return `<td>—</td>`;
       }
