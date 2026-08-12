@@ -1136,18 +1136,10 @@ function calculateDaysInStatus(r) {
   if (!targetDate || isNaN(targetDate.getTime())) return { days: null, delayLevel: 0 };
   
   targetDate.setHours(0,0,0,0);
-  const diffTime = Math.abs(today - targetDate);
+  const diffTime = today.getTime() - targetDate.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   
-  let delayLevel = 0; // 0 = normal, 1 = warning/delayed
-  
-  if (['Tender to Be Published', 'Tender Under Finalisation'].includes(r.current_status) && diffDays > 7) {
-    delayLevel = 1;
-  } else if (['Under Vetting', 'Under Concurrence'].includes(r.current_status) && diffDays > 3) {
-    delayLevel = 1;
-  }
-  
-  return { days: diffDays, delayLevel: delayLevel };
+  return { days: diffDays, delayLevel: 0 };
 }
 
 function renderTable() {
